@@ -1,6 +1,4 @@
 {
-  "framework": "vite",
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "rootDirectory": "web"
+    "cleanUrls": true,
+    "trailingSlash": false
 }

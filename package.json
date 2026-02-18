@@ -1,0 +1,7 @@
+{
+    "name": "optical-flow-root",
+    "private": true,
+    "scripts": {
+        "build": "cd web && npm install && npm run build"
+    }
+}
