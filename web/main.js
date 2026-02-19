@@ -184,7 +184,7 @@ function loop(timestamp) {
         if (isIsolateMode) {
             let gray = new cv.Mat();
             cv.cvtColor(frame, gray, cv.COLOR_RGBA2GRAY);
-            tracker.enhanceContrast(gray, new cv.Rect(0, 0, gray.cols, gray.rows));
+            tracker.enhanceContrast(frame, gray, new cv.Rect(0, 0, gray.cols, gray.rows));
             cv.cvtColor(gray, frame, cv.COLOR_GRAY2RGBA);
             cv.imshow(canvas, frame);
             gray.delete();
