@@ -138,12 +138,6 @@ export class Tracker {
             mask.delete();
 
             if (this.p0.rows > 5) {
-                // Sub-pixel refinement
-                const winSize = new cv.Size(5, 5);
-                const zeroZone = new cv.Size(-1, -1);
-                const criteria = new cv.TermCriteria(cv.TermCriteria_EPS + cv.TermCriteria_COUNT, 40, 0.001);
-                cv.cornerSubPix(this.prevGray, this.p0, winSize, zeroZone, criteria);
-
                 this.roi = roi;
                 this.status = "LOCKED";
                 this.baseSpread = this.calculateSpread(this.p0);
@@ -268,12 +262,6 @@ export class Tracker {
         mask.delete();
 
         if (np.rows > 5) {
-            // Sub-pixel refinement for new points
-            const subWinSize = new cv.Size(5, 5);
-            const subZeroZone = new cv.Size(-1, -1);
-            const subCriteria = new cv.TermCriteria(cv.TermCriteria_EPS + cv.TermCriteria_COUNT, 40, 0.001);
-            cv.cornerSubPix(gray, np, subWinSize, subZeroZone, subCriteria);
-
             this.p0.delete();
             this.p0 = np;
             this.baseSpread = this.calculateSpread(this.p0);
