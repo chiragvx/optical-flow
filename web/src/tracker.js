@@ -1,127 +1,3 @@
-class KalmanFilter {
-    constructor() {
-        // State: [x, y, w, h, dx, dy, dw, dh]
-        this.state = null;
-        this.P = cv.Mat.eye(8, 8, cv.CV_32F);
-        this.F = cv.Mat.eye(8, 8, cv.CV_32F);
-        this.H = cv.Mat.zeros(4, 8, cv.CV_32F);
-
-        // Measurement matrix: we only measure [x, y, w, h]
-        for (let i = 0; i < 4; i++) {
-            this.H.data32F[i * 8 + i] = 1.0;
-        }
-
-        // Constant Matrices (reused to avoid leaks)
-        this.zeroMat = new cv.Mat();
-        this.I = cv.Mat.eye(8, 8, cv.CV_32F);
-
-        // Tuned for Damping: Q (Process Noise) is low, R (Measurement Noise) is high
-        this.Q_base = cv.Mat.eye(8, 8, cv.CV_32F).mul(cv.Mat.eye(8, 8, cv.CV_32F), 0.01);
-        this.R = cv.Mat.eye(4, 4, cv.CV_32F).mul(cv.Mat.eye(4, 4, cv.CV_32F), 10.0);
-        this.Q = new cv.Mat();
-    }
-
-    init(roi) {
-        if (this.state) this.state.delete();
-        this.state = new cv.Mat(8, 1, cv.CV_32F);
-        this.state.data32F.set([roi[0], roi[1], roi[2], roi[3], 0, 0, 0, 0]);
-        this.P = cv.Mat.eye(8, 8, cv.CV_32F).mul(cv.Mat.eye(8, 8, cv.CV_32F), 1.0);
-    }
-
-    predict(dt = 1.0) {
-        if (!this.state) return null;
-
-        // Update Transition Matrix with current dt
-        for (let i = 0; i < 4; i++) {
-            this.F.data32F[i * 8 + (i + 4)] = dt;
-        }
-
-        // Q scales with dt (Scalar multiplication via convertTo)
-        this.Q_base.convertTo(this.Q, -1, dt, 0);
-
-        // x = F * x
-        let nextState = new cv.Mat();
-        cv.gemm(this.F, this.state, 1, this.zeroMat, 0, nextState);
-        this.state.delete();
-        this.state = nextState;
-
-
-        // P = F * P * F' + Q
-        let Ft = new cv.Mat();
-        cv.transpose(this.F, Ft);
-        let PFt = new cv.Mat();
-        cv.gemm(this.P, Ft, 1, this.zeroMat, 0, PFt);
-        let FPFt = new cv.Mat();
-        cv.gemm(this.F, PFt, 1, this.zeroMat, 0, FPFt);
-        cv.add(FPFt, this.Q, this.P);
-
-        Ft.delete(); PFt.delete(); FPFt.delete();
-        return Array.from(this.state.data32F.slice(0, 4));
-    }
-
-    update(roi) {
-        if (!this.state) return;
-        const z = new cv.Mat(4, 1, cv.CV_32F);
-        z.data32F.set(roi);
-
-        // y = z - H * x
-        let Hx = new cv.Mat();
-        cv.gemm(this.H, this.state, 1, this.zeroMat, 0, Hx);
-        let y = new cv.Mat();
-        cv.subtract(z, Hx, y);
-
-        // S = H * P * H' + R
-        let Ht = new cv.Mat();
-        cv.transpose(this.H, Ht);
-        let PHt = new cv.Mat();
-        cv.gemm(this.P, Ht, 1, this.zeroMat, 0, PHt);
-        let HPHt = new cv.Mat();
-        cv.gemm(this.H, PHt, 1, this.zeroMat, 0, HPHt);
-        let S = new cv.Mat();
-        cv.add(HPHt, this.R, S);
-
-        // K = P * H' * S^-1
-        let Si = new cv.Mat();
-        cv.invert(S, Si);
-        let K = new cv.Mat();
-        cv.gemm(PHt, Si, 1, this.zeroMat, 0, K);
-
-        // x = x + K * y
-        let Ky = new cv.Mat();
-        cv.gemm(K, y, 1, this.zeroMat, 0, Ky);
-        let nextState = new cv.Mat();
-        cv.add(this.state, Ky, nextState);
-        this.state.delete();
-        this.state = nextState;
-
-        // P = (I - K * H) * P
-        let KH = new cv.Mat();
-        cv.gemm(K, this.H, 1, this.zeroMat, 0, KH);
-        let IKH = new cv.Mat();
-        cv.subtract(this.I, KH, IKH);
-        let nextP = new cv.Mat();
-        cv.gemm(IKH, this.P, 1, this.zeroMat, 0, nextP);
-        this.P.delete();
-        this.P = nextP;
-
-        z.delete(); Hx.delete(); y.delete(); Ht.delete(); PHt.delete();
-        HPHt.delete(); S.delete(); Si.delete(); K.delete(); Ky.delete();
-        KH.delete(); IKH.delete();
-    }
-
-    delete() {
-        if (this.state) this.state.delete();
-        if (this.P) this.P.delete();
-        if (this.F) this.F.delete();
-        if (this.H) this.H.delete();
-        if (this.Q) this.Q.delete();
-        if (this.R) this.R.delete();
-        if (this.Q_base) this.Q_base.delete();
-        if (this.zeroMat) this.zeroMat.delete();
-        if (this.I) this.I.delete();
-    }
-}
-
 export class Tracker {
     constructor() {
         this.prevGray = null;
@@ -137,8 +13,6 @@ export class Tracker {
         this.st = null;
         this.err = null;
 
-        this.kalman = new KalmanFilter();
-
         this.clahe = null;
         try {
             if (typeof cv.createCLAHE === 'function') {
@@ -146,9 +20,11 @@ export class Tracker {
             }
         } catch (e) { }
 
-        this.scaleAlpha = 0.05; // Heavier scale smoothing
-        this.emaAlpha = 0.3;   // Final cinematic smoothing layer
+        // Stability Parameters
+        this.moveAlpha = 0.4;  // Smoothing for position
+        this.scaleAlpha = 0.05; // High inertia for scaling
         this.baseSpread = 1.0;
+        this.lastValidVelocity = { x: 0, y: 0 };
     }
 
     enhanceContrast(gray, rect) {
@@ -176,16 +52,17 @@ export class Tracker {
             let maskRoi = mask.roi(rect);
             maskRoi.setTo(new cv.Scalar(255));
             maskRoi.delete();
+
             if (this.p0) this.p0.delete();
             this.p0 = new cv.Mat();
-            cv.goodFeaturesToTrack(this.prevGray, this.p0, 150, 0.01, 7, mask);
+            cv.goodFeaturesToTrack(this.prevGray, this.p0, 100, 0.01, 7, mask);
             mask.delete();
 
             if (this.p0.rows > 5) {
                 this.roi = roi;
                 this.status = "LOCKED";
                 this.baseSpread = this.calculateSpread(this.p0);
-                this.kalman.init(roi);
+                this.lastValidVelocity = { x: 0, y: 0 };
                 return true;
             }
         }
@@ -195,6 +72,7 @@ export class Tracker {
 
     calculateSpread(mat) {
         let sx = 0, sy = 0, c = mat.rows;
+        if (c < 2) return 1.0;
         for (let i = 0; i < c; i++) {
             sx += mat.data32F[i * 2]; sy += mat.data32F[i * 2 + 1];
         }
@@ -213,107 +91,71 @@ export class Tracker {
         if (!this.st) this.st = new cv.Mat();
         if (!this.err) this.err = new cv.Mat();
 
-        // Kalman Prediction
-        const predictedROI = this.kalman.predict(dt);
-
         const gray = new cv.Mat();
         cv.cvtColor(frame, gray, cv.COLOR_RGBA2GRAY);
 
         cv.calcOpticalFlowPyrLK(this.prevGray, gray, this.p0, this.p1, this.st, this.err, this.winSize, this.maxLevel, this.criteria);
 
-        let sumX = 0, sumY = 0, count = 0;
         let dxs = [], dys = [];
-        let initialPoints = [];
-
+        let validPoints = [];
         for (let i = 0; i < this.st.rows; i++) {
             if (this.st.data[i] === 1) {
                 const px1 = this.p1.data32F[i * 2], py1 = this.p1.data32F[i * 2 + 1];
                 const px0 = this.p0.data32F[i * 2], py0 = this.p0.data32F[i * 2 + 1];
                 dxs.push(px1 - px0);
                 dys.push(py1 - py0);
-                initialPoints.push({ x: px1, y: py1 });
+                validPoints.push({ x: px1, y: py1 });
             }
         }
 
-        let filteredPoints = initialPoints;
-        if (dxs.length > 5) {
-            const getMAD = (arr) => {
-                const mid = Math.floor(arr.length / 2);
+        if (validPoints.length > 5) {
+            // Consensus Motion: Use Median to reject erratic individual jumps
+            const getMedian = (arr) => {
                 const sorted = [...arr].sort((a, b) => a - b);
-                const median = sorted[mid];
-                const devs = arr.map(x => Math.abs(x - median)).sort((a, b) => a - b);
-                return { median, mad: devs[mid] || 0.1 };
-            }
-            const madX = getMAD(dxs), madY = getMAD(dys);
+                return sorted[Math.floor(sorted.length / 2)];
+            };
+            const medDX = getMedian(dxs);
+            const medDY = getMedian(dys);
 
-            filteredPoints = [];
-            sumX = 0; sumY = 0; count = 0;
-            for (let i = 0, j = 0; i < this.st.rows; i++) {
-                if (this.st.data[i] === 1) {
-                    const dx = dxs[j], dy = dys[j];
-                    // Relaxed MAD threshold (5x) for smoother transitions
-                    if (Math.abs(dx - madX.median) < 5 * madX.mad &&
-                        Math.abs(dy - madY.median) < 5 * madY.mad) {
-                        const px = this.p1.data32F[i * 2], py = this.p1.data32F[i * 2 + 1];
-                        filteredPoints.push({ x: px, y: py });
-                        sumX += px; sumY += py; count++;
-                    } else {
-                        this.st.data[i] = 0;
-                    }
-                    j++;
-                }
-            }
-        } else {
-            // Simple pass-through if not enough points for MAD
-            sumX = initialPoints.reduce((s, p) => s + p.x, 0);
-            sumY = initialPoints.reduce((s, p) => s + p.y, 0);
-            count = initialPoints.length;
-        }
+            // High Inertia Smoothing
+            const currentVelocity = { x: medDX, y: medDY };
+            this.lastValidVelocity.x = this.lastValidVelocity.x * (1 - this.moveAlpha) + currentVelocity.x * this.moveAlpha;
+            this.lastValidVelocity.y = this.lastValidVelocity.y * (1 - this.moveAlpha) + currentVelocity.y * this.moveAlpha;
 
-        if (count > 5) {
-            const centroidX = sumX / count, centroidY = sumY / count;
+            // Scale Inertia: Average spread to prevent pulsing
             const currentSpread = this.calculateSpread(this.p1);
             let scale = currentSpread / this.baseSpread;
+            // Limit scale change to 5% per frame
             scale = 1.0 * (1 - this.scaleAlpha) + Math.min(1.1, Math.max(0.9, scale)) * this.scaleAlpha;
             this.baseSpread = currentSpread;
 
             const [rx, ry, rw, rh] = this.roi;
             const newW = rw * scale, newH = rh * scale;
-            const newROI = [centroidX - newW / 2, centroidY - newH / 2, newW, newH];
+            const newX = rx + this.lastValidVelocity.x - (newW - rw) / 2;
+            const newY = ry + this.lastValidVelocity.y - (newH - rh) / 2;
 
-            // 1. Kalman Update (Damped by higher R)
-            this.kalman.update(newROI);
+            this.roi = [newX, newY, newW, newH];
 
-            // 2. Final EMA Silk-Smooth Layer
-            const targetROI = Array.from(this.kalman.state.data32F.slice(0, 4));
-            this.roi = [
-                this.roi[0] * (1 - this.emaAlpha) + targetROI[0] * this.emaAlpha,
-                this.roi[1] * (1 - this.emaAlpha) + targetROI[1] * this.emaAlpha,
-                this.roi[2] * (1 - this.emaAlpha) + targetROI[2] * this.emaAlpha,
-                this.roi[3] * (1 - this.emaAlpha) + targetROI[3] * this.emaAlpha
-            ];
-
-            if (count < 40) this.refreshPoints(gray);
-            else {
-                const gp = new cv.Mat(count, 1, cv.CV_32FC2);
+            // Feature Refresh Logic
+            if (validPoints.length < 30) {
+                this.refreshPoints(gray);
+            } else {
+                // Update p0 with p1 (only valid points)
+                const nextP0 = new cv.Mat(validPoints.length, 1, cv.CV_32FC2);
                 for (let i = 0, idx = 0; i < this.st.rows; i++) {
                     if (this.st.data[i] === 1) {
-                        gp.data32F[idx * 2] = this.p1.data32F[i * 2];
-                        gp.data32F[idx * 2 + 1] = this.p1.data32F[i * 2 + 1];
+                        nextP0.data32F[idx * 2] = this.p1.data32F[i * 2];
+                        nextP0.data32F[idx * 2 + 1] = this.p1.data32F[i * 2 + 1];
                         idx++;
                     }
                 }
-                this.p0.delete(); this.p0 = gp;
+                this.p0.delete();
+                this.p0 = nextP0;
             }
-            this.prevGray.delete(); this.prevGray = gray;
-            return { roi: this.roi, points: filteredPoints || [] };
-        }
 
-        // If lost, use prediction for a few frames
-        if (predictedROI) {
-            this.roi = predictedROI;
-            this.prevGray.delete(); this.prevGray = gray;
-            return { roi: this.roi, points: [] };
+            this.prevGray.delete();
+            this.prevGray = gray;
+            return { roi: this.roi, points: validPoints };
         }
 
         this.status = "LOST";
@@ -329,18 +171,22 @@ export class Tracker {
             Math.min(gray.rows - Math.max(0, Math.floor(y)), Math.floor(h))
         );
         if (rect.width < 10 || rect.height < 10) return;
+
         this.enhanceContrast(gray, rect);
         const mask = new cv.Mat.zeros(gray.rows, gray.cols, cv.CV_8UC1);
         let maskRoi = mask.roi(rect);
         maskRoi.setTo(new cv.Scalar(255));
         maskRoi.delete();
+
         const np = new cv.Mat();
-        cv.goodFeaturesToTrack(gray, np, 150, 0.01, 7, mask);
+        cv.goodFeaturesToTrack(gray, np, 100, 0.01, 7, mask);
+        mask.delete();
+
         if (np.rows > 5) {
-            this.p0.delete(); this.p0 = np;
+            this.p0.delete();
+            this.p0 = np;
             this.baseSpread = this.calculateSpread(this.p0);
         } else np.delete();
-        mask.delete();
     }
 
     delete() {
@@ -350,6 +196,5 @@ export class Tracker {
         if (this.st) this.st.delete();
         if (this.err) this.err.delete();
         if (this.clahe) this.clahe.delete();
-        this.kalman.delete();
     }
 }
