@@ -166,6 +166,15 @@ async function start() {
     setupSlider('sat-slider', 'sat-val', 'satMin');
     setupSlider('val-slider-min', 'val-val-min', 'valMin');
 
+    // Advanced Gate Logic
+    const gateSlider = document.getElementById('gate-slider');
+    const gateVal = document.getElementById('gate-val');
+    gateSlider.oninput = () => {
+        let value = parseInt(gateSlider.value);
+        tracker.intensityGate = value;
+        gateVal.innerText = value >= 255 ? 'OFF' : value;
+    };
+
     updateControlVisibility();
     requestAnimationFrame(loop);
 }

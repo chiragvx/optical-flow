@@ -40,6 +40,9 @@ export class Tracker {
         this.hueWidth = 20;      // 1-180
         this.satMin = 50;        // 0-255
         this.valMin = 50;        // 0-255
+
+        // Glare Gating (Hotspot Suppression)
+        this.intensityGate = 255; // 0-255 (255 = Off)
     }
 
     enhanceContrast(frame, gray, rect) {
@@ -101,6 +104,12 @@ export class Tracker {
             if (this.clahe) this.clahe.apply(roiGray, roiGray);
             else cv.equalizeHist(roiGray, roiGray);
         }
+
+        // 4. Glare Gating (Surgical Hotspot Suppression)
+        if (this.intensityGate < 255) {
+            cv.threshold(roiGray, roiGray, this.intensityGate, 255, cv.THRESH_TOZERO_INV);
+        }
+
         roiGray.delete();
         roiColor.delete();
     }
