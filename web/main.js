@@ -13,6 +13,7 @@ const resetBtn = document.getElementById('reset-btn');
 
 let camera, tracker, ui;
 let lastTime = 0;
+let lastFpsUpdate = 0;
 let frames = 0;
 let fps = 0;
 
@@ -49,12 +50,19 @@ async function start() {
 }
 
 function loop(timestamp) {
-    // Calculate FPS
-    const dt = timestamp - lastTime;
-    if (dt >= 1000) {
+    if (!lastTime) lastTime = timestamp;
+    if (!lastFpsUpdate) lastFpsUpdate = timestamp;
+
+    // Calculate per-frame Delta Time
+    const dt_ms = timestamp - lastTime;
+    lastTime = timestamp;
+    const dt = dt_ms / 16.67; // Normalized to 60fps base
+
+    // Calculate FPS every second
+    if (timestamp - lastFpsUpdate >= 1000) {
         fps = frames;
         frames = 0;
-        lastTime = timestamp;
+        lastFpsUpdate = timestamp;
         fpsEl.innerText = `FPS: ${fps}`;
     }
     frames++;
@@ -71,8 +79,9 @@ function loop(timestamp) {
         tracker.init(frame, newRoi);
     }
 
-    // Update tracking
-    const result = tracker.update(frame);
+    // Update tracking with dynamic DT
+    const result = tracker.update(frame, dt);
+
 
     // UI Feedback
     statusEl.innerText = `STATUS: ${tracker.status}`;

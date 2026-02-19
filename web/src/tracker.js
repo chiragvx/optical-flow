@@ -2,39 +2,46 @@ class KalmanFilter {
     constructor() {
         // State: [x, y, w, h, dx, dy, dw, dh]
         this.state = null;
-        this.P = cv.Mat.eye(8, 8, cv.CV_32F); // Covariance
-        this.F = cv.Mat.eye(8, 8, cv.CV_32F); // State Transition
-        this.H = cv.Mat.zeros(4, 8, cv.CV_32F); // Measurement Matrix
-
-        // Transition matrix (constant velocity model)
-        const dt = 1.0;
-        for (let i = 0; i < 4; i++) {
-            this.F.data32F[i * 8 + (i + 4)] = dt;
-        }
+        this.P = cv.Mat.eye(8, 8, cv.CV_32F);
+        this.F = cv.Mat.eye(8, 8, cv.CV_32F);
+        this.H = cv.Mat.zeros(4, 8, cv.CV_32F);
 
         // Measurement matrix: we only measure [x, y, w, h]
         for (let i = 0; i < 4; i++) {
             this.H.data32F[i * 8 + i] = 1.0;
         }
 
-        this.Q = cv.Mat.eye(8, 8, cv.CV_32F).mul(cv.Mat.eye(8, 8, cv.CV_32F), 0.1); // Process Noise
-        this.R = cv.Mat.eye(4, 4, cv.CV_32F).mul(cv.Mat.eye(4, 4, cv.CV_32F), 0.5); // Measurement Noise
+        // Tuned for Damping: Q (Process Noise) is low, R (Measurement Noise) is high
+        this.Q_base = cv.Mat.eye(8, 8, cv.CV_32F).mul(cv.Mat.eye(8, 8, cv.CV_32F), 0.01);
+        this.R = cv.Mat.eye(4, 4, cv.CV_32F).mul(cv.Mat.eye(4, 4, cv.CV_32F), 10.0);
+        this.Q = new cv.Mat();
     }
 
     init(roi) {
         if (this.state) this.state.delete();
         this.state = new cv.Mat(8, 1, cv.CV_32F);
         this.state.data32F.set([roi[0], roi[1], roi[2], roi[3], 0, 0, 0, 0]);
-        this.P = cv.Mat.eye(8, 8, cv.CV_32F).mul(cv.Mat.eye(8, 8, cv.CV_32F), 10.0);
+        this.P = cv.Mat.eye(8, 8, cv.CV_32F).mul(cv.Mat.eye(8, 8, cv.CV_32F), 1.0);
     }
 
-    predict() {
+    predict(dt = 1.0) {
         if (!this.state) return null;
+
+        // Update Transition Matrix with current dt
+        for (let i = 0; i < 4; i++) {
+            this.F.data32F[i * 8 + (i + 4)] = dt;
+        }
+
+        // Q scales with dt
+        this.Q_base.copyTo(this.Q);
+        this.Q.mul(this.Q, dt);
+
         // x = F * x
         let nextState = new cv.Mat();
         cv.gemm(this.F, this.state, 1, new cv.Mat(), 0, nextState);
         this.state.delete();
         this.state = nextState;
+
 
         // P = F * P * F' + Q
         let Ft = new cv.Mat();
@@ -119,7 +126,7 @@ export class Tracker {
 
         this.winSize = new cv.Size(15, 15);
         this.maxLevel = 2;
-        this.criteria = new cv.TermCriteria(cv.TermCriteria_EPS | cv.TermCriteria_COUNT, 10, 0.05);
+        this.criteria = new cv.TermCriteria(cv.TermCriteria_EPS | cv.TermCriteria_COUNT, 20, 0.01);
 
         this.p1 = null;
         this.st = null;
@@ -134,7 +141,8 @@ export class Tracker {
             }
         } catch (e) { }
 
-        this.scaleAlpha = 0.1;
+        this.scaleAlpha = 0.05; // Heavier scale smoothing
+        this.emaAlpha = 0.3;   // Final cinematic smoothing layer
         this.baseSpread = 1.0;
     }
 
@@ -191,7 +199,7 @@ export class Tracker {
         return vs / c;
     }
 
-    update(frame) {
+    update(frame, dt = 1.0) {
         if (this.status !== "LOCKED" || !this.p0 || this.p0.rows === 0) return null;
 
         if (!this.p1) this.p1 = new cv.Mat();
@@ -199,7 +207,7 @@ export class Tracker {
         if (!this.err) this.err = new cv.Mat();
 
         // Kalman Prediction
-        const predictedROI = this.kalman.predict();
+        const predictedROI = this.kalman.predict(dt);
 
         const gray = new cv.Mat();
         cv.cvtColor(frame, gray, cv.COLOR_RGBA2GRAY);
@@ -236,8 +244,9 @@ export class Tracker {
             for (let i = 0, j = 0; i < this.st.rows; i++) {
                 if (this.st.data[i] === 1) {
                     const dx = dxs[j], dy = dys[j];
-                    if (Math.abs(dx - madX.median) < 3 * madX.mad &&
-                        Math.abs(dy - madY.median) < 3 * madY.mad) {
+                    // Relaxed MAD threshold (5x) for smoother transitions
+                    if (Math.abs(dx - madX.median) < 5 * madX.mad &&
+                        Math.abs(dy - madY.median) < 5 * madY.mad) {
                         const px = this.p1.data32F[i * 2], py = this.p1.data32F[i * 2 + 1];
                         filteredPoints.push({ x: px, y: py });
                         sumX += px; sumY += py; count++;
@@ -265,9 +274,17 @@ export class Tracker {
             const newW = rw * scale, newH = rh * scale;
             const newROI = [centroidX - newW / 2, centroidY - newH / 2, newW, newH];
 
-            // Kalman Update
+            // 1. Kalman Update (Damped by higher R)
             this.kalman.update(newROI);
-            this.roi = Array.from(this.kalman.state.data32F.slice(0, 4));
+
+            // 2. Final EMA Silk-Smooth Layer
+            const targetROI = Array.from(this.kalman.state.data32F.slice(0, 4));
+            this.roi = [
+                this.roi[0] * (1 - this.emaAlpha) + targetROI[0] * this.emaAlpha,
+                this.roi[1] * (1 - this.emaAlpha) + targetROI[1] * this.emaAlpha,
+                this.roi[2] * (1 - this.emaAlpha) + targetROI[2] * this.emaAlpha,
+                this.roi[3] * (1 - this.emaAlpha) + targetROI[3] * this.emaAlpha
+            ];
 
             if (count < 40) this.refreshPoints(gray);
             else {
