@@ -4,7 +4,7 @@ import { UIManager } from './src/ui.js';
 
 const video = document.getElementById('video');
 const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
+const ctx = canvas.getContext('2d', { willReadFrequently: true });
 const overlay = document.getElementById('selection-overlay');
 const fpsEl = document.getElementById('fps');
 const statusEl = document.getElementById('status');
