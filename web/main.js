@@ -15,8 +15,14 @@ const resetBtn = document.getElementById('reset-btn');
 let zoomScale = 1;
 const panOffset = { x: 0.5, y: 0.5 }; // Range 0 to 1
 
+let camera, tracker, ui;
+let lastTime = 0;
+let lastFpsUpdate = 0;
+let frames = 0;
+let fps = 0;
+
 async function start() {
-    // ... wait for CV ...
+    // Wait for OpenCV and its core constructors to be ready
     if (typeof cv === 'undefined' || !cv.Mat) {
         setTimeout(start, 50);
         return;
