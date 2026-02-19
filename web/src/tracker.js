@@ -11,6 +11,10 @@ class KalmanFilter {
             this.H.data32F[i * 8 + i] = 1.0;
         }
 
+        // Constant Matrices (reused to avoid leaks)
+        this.zeroMat = new cv.Mat();
+        this.I = cv.Mat.eye(8, 8, cv.CV_32F);
+
         // Tuned for Damping: Q (Process Noise) is low, R (Measurement Noise) is high
         this.Q_base = cv.Mat.eye(8, 8, cv.CV_32F).mul(cv.Mat.eye(8, 8, cv.CV_32F), 0.01);
         this.R = cv.Mat.eye(4, 4, cv.CV_32F).mul(cv.Mat.eye(4, 4, cv.CV_32F), 10.0);
@@ -32,13 +36,12 @@ class KalmanFilter {
             this.F.data32F[i * 8 + (i + 4)] = dt;
         }
 
-        // Q scales with dt
-        this.Q_base.copyTo(this.Q);
-        this.Q.mul(this.Q, dt);
+        // Q scales with dt (Scalar multiplication via convertTo)
+        this.Q_base.convertTo(this.Q, -1, dt, 0);
 
         // x = F * x
         let nextState = new cv.Mat();
-        cv.gemm(this.F, this.state, 1, new cv.Mat(), 0, nextState);
+        cv.gemm(this.F, this.state, 1, this.zeroMat, 0, nextState);
         this.state.delete();
         this.state = nextState;
 
@@ -47,9 +50,9 @@ class KalmanFilter {
         let Ft = new cv.Mat();
         cv.transpose(this.F, Ft);
         let PFt = new cv.Mat();
-        cv.gemm(this.P, Ft, 1, new cv.Mat(), 0, PFt);
+        cv.gemm(this.P, Ft, 1, this.zeroMat, 0, PFt);
         let FPFt = new cv.Mat();
-        cv.gemm(this.F, PFt, 1, new cv.Mat(), 0, FPFt);
+        cv.gemm(this.F, PFt, 1, this.zeroMat, 0, FPFt);
         cv.add(FPFt, this.Q, this.P);
 
         Ft.delete(); PFt.delete(); FPFt.delete();
@@ -63,7 +66,7 @@ class KalmanFilter {
 
         // y = z - H * x
         let Hx = new cv.Mat();
-        cv.gemm(this.H, this.state, 1, new cv.Mat(), 0, Hx);
+        cv.gemm(this.H, this.state, 1, this.zeroMat, 0, Hx);
         let y = new cv.Mat();
         cv.subtract(z, Hx, y);
 
@@ -71,9 +74,9 @@ class KalmanFilter {
         let Ht = new cv.Mat();
         cv.transpose(this.H, Ht);
         let PHt = new cv.Mat();
-        cv.gemm(this.P, Ht, 1, new cv.Mat(), 0, PHt);
+        cv.gemm(this.P, Ht, 1, this.zeroMat, 0, PHt);
         let HPHt = new cv.Mat();
-        cv.gemm(this.H, PHt, 1, new cv.Mat(), 0, HPHt);
+        cv.gemm(this.H, PHt, 1, this.zeroMat, 0, HPHt);
         let S = new cv.Mat();
         cv.add(HPHt, this.R, S);
 
@@ -81,11 +84,11 @@ class KalmanFilter {
         let Si = new cv.Mat();
         cv.invert(S, Si);
         let K = new cv.Mat();
-        cv.gemm(PHt, Si, 1, new cv.Mat(), 0, K);
+        cv.gemm(PHt, Si, 1, this.zeroMat, 0, K);
 
         // x = x + K * y
         let Ky = new cv.Mat();
-        cv.gemm(K, y, 1, new cv.Mat(), 0, Ky);
+        cv.gemm(K, y, 1, this.zeroMat, 0, Ky);
         let nextState = new cv.Mat();
         cv.add(this.state, Ky, nextState);
         this.state.delete();
@@ -93,12 +96,11 @@ class KalmanFilter {
 
         // P = (I - K * H) * P
         let KH = new cv.Mat();
-        cv.gemm(K, this.H, 1, new cv.Mat(), 0, KH);
-        let I = cv.Mat.eye(8, 8, cv.CV_32F);
+        cv.gemm(K, this.H, 1, this.zeroMat, 0, KH);
         let IKH = new cv.Mat();
-        cv.subtract(I, KH, IKH);
+        cv.subtract(this.I, KH, IKH);
         let nextP = new cv.Mat();
-        cv.gemm(IKH, this.P, 1, new cv.Mat(), 0, nextP);
+        cv.gemm(IKH, this.P, 1, this.zeroMat, 0, nextP);
         this.P.delete();
         this.P = nextP;
 
@@ -114,6 +116,9 @@ class KalmanFilter {
         if (this.H) this.H.delete();
         if (this.Q) this.Q.delete();
         if (this.R) this.R.delete();
+        if (this.Q_base) this.Q_base.delete();
+        if (this.zeroMat) this.zeroMat.delete();
+        if (this.I) this.I.delete();
     }
 }
 
@@ -168,7 +173,9 @@ export class Tracker {
         if (rect.width > 10 && rect.height > 10) {
             this.enhanceContrast(this.prevGray, rect);
             const mask = new cv.Mat.zeros(this.prevGray.rows, this.prevGray.cols, cv.CV_8UC1);
-            mask.roi(rect).setTo(new cv.Scalar(255));
+            let maskRoi = mask.roi(rect);
+            maskRoi.setTo(new cv.Scalar(255));
+            maskRoi.delete();
             if (this.p0) this.p0.delete();
             this.p0 = new cv.Mat();
             cv.goodFeaturesToTrack(this.prevGray, this.p0, 150, 0.01, 7, mask);
@@ -324,7 +331,9 @@ export class Tracker {
         if (rect.width < 10 || rect.height < 10) return;
         this.enhanceContrast(gray, rect);
         const mask = new cv.Mat.zeros(gray.rows, gray.cols, cv.CV_8UC1);
-        mask.roi(rect).setTo(new cv.Scalar(255));
+        let maskRoi = mask.roi(rect);
+        maskRoi.setTo(new cv.Scalar(255));
+        maskRoi.delete();
         const np = new cv.Mat();
         cv.goodFeaturesToTrack(gray, np, 150, 0.01, 7, mask);
         if (np.rows > 5) {

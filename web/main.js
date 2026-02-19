@@ -72,6 +72,20 @@ async function start() {
 }
 
 function loop(timestamp) {
+    // Safety guard: Wait for valid video dimensions
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+        requestAnimationFrame(loop);
+        return;
+    }
+
+    // Reset tracker if dimensions change (prevents WASM size mismatch crash)
+    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        tracker.status = "STANDBY";
+        tracker.roi = null;
+    }
+
     if (!lastTime) lastTime = timestamp;
     if (!lastFpsUpdate) lastFpsUpdate = timestamp;
 
@@ -96,35 +110,43 @@ function loop(timestamp) {
     // Draw transformed video to canvas
     ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
 
-    const frame = cv.imread(canvas);
+    let frame;
+    try {
+        frame = cv.imread(canvas);
 
-    const newRoi = ui.consumeROI();
-    if (newRoi) {
-        tracker.init(frame, newRoi);
-    }
-
-    const result = tracker.update(frame, dt);
-
-    statusEl.innerText = `STATUS: ${tracker.status}`;
-    statusEl.style.color = tracker.status === "LOCKED" ? "#00ff41" : "#ffff00";
-
-    if (tracker.status === "LOCKED" && tracker.roi) {
-        const [x, y, w, h] = tracker.roi;
-        ctx.strokeStyle = '#00ff41';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(x, y, w, h);
-
-        if (result && result.points) {
-            ctx.fillStyle = '#ffff00';
-            result.points.forEach(p => {
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
-                ctx.fill();
-            });
+        const newRoi = ui.consumeROI();
+        if (newRoi) {
+            tracker.init(frame, newRoi);
         }
+
+        const result = tracker.update(frame, dt);
+
+        statusEl.innerText = `STATUS: ${tracker.status}`;
+        statusEl.style.color = tracker.status === "LOCKED" ? "#00ff41" : "#ffff00";
+
+        if (tracker.status === "LOCKED" && tracker.roi) {
+            const [x, y, w, h] = tracker.roi;
+            ctx.strokeStyle = '#00ff41';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, w, h);
+
+            if (result && result.points) {
+                ctx.fillStyle = '#ffff00';
+                result.points.forEach(p => {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+            }
+        }
+        frame.delete();
+    } catch (e) {
+        console.error("Tracking Loop Fault:", e);
+        if (frame) frame.delete();
+        tracker.status = "FAULT";
+        statusEl.innerText = "STATUS: CV FAULT";
     }
 
-    frame.delete();
     requestAnimationFrame(loop);
 }
 
