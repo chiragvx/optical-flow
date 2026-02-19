@@ -240,18 +240,53 @@ function loop(timestamp) {
 
         if (tracker.status === "LOCKED" && tracker.roi) {
             const [x, y, w, h] = tracker.roi;
+            const cx = x + w / 2;
+            const cy = y + h / 2;
+
+            // 1. Draw Tracking Box (Outer corners only for professional look)
             ctx.strokeStyle = '#00ff41';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(x, y, w, h);
+            ctx.lineWidth = 1;
+            const cornerLen = 10;
+
+            // Top Left
+            ctx.beginPath(); ctx.moveTo(x, y + cornerLen); ctx.lineTo(x, y); ctx.lineTo(x + cornerLen, y); ctx.stroke();
+            // Top Right
+            ctx.beginPath(); ctx.moveTo(x + w - cornerLen, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + cornerLen); ctx.stroke();
+            // Bottom Left
+            ctx.beginPath(); ctx.moveTo(x, y + h - cornerLen); ctx.lineTo(x, y + h); ctx.lineTo(x + cornerLen, y + h); ctx.stroke();
+            // Bottom Right
+            ctx.beginPath(); ctx.moveTo(x + w - cornerLen, y + h); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w, y + h - cornerLen); ctx.stroke();
+
+            // 2. Draw Precision Strike Reticle (Crosshairs)
+            ctx.strokeStyle = 'rgba(0, 255, 65, 0.6)';
+            ctx.setLineDash([2, 4]); // Tactical dashed lines
+            ctx.beginPath();
+            ctx.moveTo(cx, y - 5); ctx.lineTo(cx, y + h + 5); // Vertical
+            ctx.moveTo(x - 5, cy); ctx.lineTo(x + w + 5, cy); // Horizontal
+            ctx.stroke();
+            ctx.setLineDash([]); // Reset dash
+
+            // 3. Center Target Point
+            ctx.fillStyle = '#ffff00';
+            ctx.beginPath();
+            ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 4. Update Guidance Telemetry (Normalized 0-1)
+            const normX = cx / canvas.width;
+            const normY = cy / canvas.height;
+            document.getElementById('tgt-coord').innerText = `TGT: X ${normX.toFixed(3)} / Y ${normY.toFixed(3)}`;
 
             if (result && result.points) {
                 ctx.fillStyle = '#ffff00';
                 result.points.forEach(p => {
                     ctx.beginPath();
-                    ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+                    ctx.arc(p.x, p.y, 1, 0, Math.PI * 2);
                     ctx.fill();
                 });
             }
+        } else {
+            document.getElementById('tgt-coord').innerText = `TGT: -- / --`;
         }
         frame.delete();
     } catch (e) {
