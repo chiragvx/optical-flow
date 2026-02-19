@@ -257,20 +257,36 @@ function loop(timestamp) {
             // Bottom Right
             ctx.beginPath(); ctx.moveTo(x + w - cornerLen, y + h); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w, y + h - cornerLen); ctx.stroke();
 
-            // 2. Draw Precision Strike Reticle (Crosshairs)
-            ctx.strokeStyle = 'rgba(0, 255, 65, 0.6)';
-            ctx.setLineDash([2, 4]); // Tactical dashed lines
+            // 2. Draw Precision Strike Reticle (Full-Screen Crosshairs)
+            ctx.strokeStyle = 'rgba(255, 255, 0, 0.4)'; // Yellowish glare
+            ctx.setLineDash([5, 15]); // Larger dash for full screen
             ctx.beginPath();
-            ctx.moveTo(cx, y - 5); ctx.lineTo(cx, y + h + 5); // Vertical
-            ctx.moveTo(x - 5, cy); ctx.lineTo(x + w + 5, cy); // Horizontal
+            // Vertical full-screen line
+            ctx.moveTo(cx, 0); ctx.lineTo(cx, canvas.height);
+            // Horizontal full-screen line
+            ctx.moveTo(0, cy); ctx.lineTo(canvas.width, cy);
             ctx.stroke();
-            ctx.setLineDash([]); // Reset dash
 
-            // 3. Center Target Point
+            // Box-localized solid crosshair (Lock on target)
+            ctx.setLineDash([]);
+            ctx.strokeStyle = '#00ff41';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(cx, y - 5); ctx.lineTo(cx, y + h + 5);
+            ctx.moveTo(x - 5, cy); ctx.lineTo(x + w + 5, cy);
+            ctx.stroke();
+
+            // 3. Center Target Point (Increased Size)
             ctx.fillStyle = '#ffff00';
             ctx.beginPath();
-            ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+            ctx.arc(cx, cy, 4, 0, Math.PI * 2); // Slightly larger
             ctx.fill();
+
+            // Outer Ring for center point
+            ctx.strokeStyle = '#00ff41';
+            ctx.beginPath();
+            ctx.arc(cx, cy, 8, 0, Math.PI * 2);
+            ctx.stroke();
 
             // 4. Update Guidance Telemetry (Normalized 0-1)
             const normX = cx / canvas.width;
@@ -281,7 +297,7 @@ function loop(timestamp) {
                 ctx.fillStyle = '#ffff00';
                 result.points.forEach(p => {
                     ctx.beginPath();
-                    ctx.arc(p.x, p.y, 1, 0, Math.PI * 2);
+                    ctx.arc(p.x, p.y, 2, 0, Math.PI * 2); // Restored point size
                     ctx.fill();
                 });
             }
