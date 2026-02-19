@@ -11,7 +11,7 @@ export class Tracker {
         this.criteria = new cv.TermCriteria(cv.TermCriteria_EPS | cv.TermCriteria_COUNT, 10, 0.03);
 
         // CLAHE for dark objects
-        this.clahe = new cv.CLAHE(2.0, new cv.Size(8, 8));
+        this.clahe = cv.createCLAHE(2.0, new cv.Size(8, 8));
         this.scaleAlpha = 0.2; // Smoothing for scale changes
     }
 
