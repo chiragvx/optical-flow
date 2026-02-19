@@ -17,8 +17,8 @@ let frames = 0;
 let fps = 0;
 
 async function start() {
-    // Wait for OpenCV
-    if (typeof cv === 'undefined') {
+    // Wait for OpenCV and its core constructors to be ready
+    if (typeof cv === 'undefined' || !cv.Mat) {
         setTimeout(start, 50);
         return;
     }

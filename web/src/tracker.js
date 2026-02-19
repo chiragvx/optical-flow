@@ -10,10 +10,11 @@ export class Tracker {
         this.maxLevel = 2;
         this.criteria = new cv.TermCriteria(cv.TermCriteria_EPS | cv.TermCriteria_COUNT, 10, 0.05);
 
-        // Pre-allocate mats to avoid GC pressure
-        this.p1 = new cv.Mat();
-        this.st = new cv.Mat();
-        this.err = new cv.Mat();
+        // Pre-allocate containers (lazy-initialized)
+        this.p1 = null;
+        this.st = null;
+        this.err = null;
+
 
         // Resilient Contrast Enhancement
         this.clahe = null;
@@ -99,7 +100,12 @@ export class Tracker {
     update(frame) {
         if (this.status !== "LOCKED" || !this.p0 || this.p0.rows === 0) return null;
 
+        if (!this.p1) this.p1 = new cv.Mat();
+        if (!this.st) this.st = new cv.Mat();
+        if (!this.err) this.err = new cv.Mat();
+
         const gray = new cv.Mat();
+
         cv.cvtColor(frame, gray, cv.COLOR_RGBA2GRAY);
 
         // 1. Single Pass LK (Speed Boost: No backward pass)
