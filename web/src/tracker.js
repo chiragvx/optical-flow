@@ -100,9 +100,18 @@ export class Tracker {
             mask.copyTo(roiGray);
             hsv.delete(); mask.delete();
         } else if (this.levelMode === 'SKY') {
-            // Binary Threshold for Aerial Targets
-            // LVL acts as the threshold. Pixels > LVL become 255 (Background), <= LVL become 0 (Target)
+            // 1. Anti-Jitter Blur (Softens edges for better LK grip)
+            cv.GaussianBlur(roiGray, roiGray, new cv.Size(5, 5), 0);
+
+            // 2. Binary Threshold for Aerial Targets
             cv.threshold(roiGray, roiGray, this.levelCenter, 255, cv.THRESH_BINARY);
+
+            // 3. Morphological Cleaning (Removes noise specks)
+            let M = cv.Mat.ones(3, 3, cv.CV_8U);
+            let anchor = new cv.Point(-1, -1);
+            cv.erode(roiGray, roiGray, M, anchor, 1, cv.BORDER_CONSTANT, cv.morphologyDefaultBorderValue());
+            cv.dilate(roiGray, roiGray, M, anchor, 1, cv.BORDER_CONSTANT, cv.morphologyDefaultBorderValue());
+            M.delete();
         } else {
             // Smart Auto
             if (this.clahe) this.clahe.apply(roiGray, roiGray);
@@ -200,16 +209,17 @@ export class Tracker {
             const medDX = getMedian(dxs);
             const medDY = getMedian(dys);
 
-            // High Inertia Smoothing
-            const currentVelocity = { x: medDX, y: medDY };
-            this.lastValidVelocity.x = this.lastValidVelocity.x * (1 - this.moveAlpha) + currentVelocity.x * this.moveAlpha;
-            this.lastValidVelocity.y = this.lastValidVelocity.y * (1 - this.moveAlpha) + currentVelocity.y * this.moveAlpha;
+            // Adaptive Smoothing (High mass for high-contrast modes)
+            const alpha = (this.levelMode === 'SKY' || this.levelMode === 'SLICE') ? 0.15 : this.moveAlpha;
+            this.lastValidVelocity.x = this.lastValidVelocity.x * (1 - alpha) + currentVelocity.x * alpha;
+            this.lastValidVelocity.y = this.lastValidVelocity.y * (1 - alpha) + currentVelocity.y * alpha;
 
             // Scale Inertia: Average spread to prevent pulsing
             const currentSpread = this.calculateSpread(this.p1);
             let scale = currentSpread / this.baseSpread;
-            // Limit scale change to 5% per frame
-            scale = 1.0 * (1 - this.scaleAlpha) + Math.min(1.1, Math.max(0.9, scale)) * this.scaleAlpha;
+
+            const sAlpha = (this.levelMode === 'SKY' || this.levelMode === 'SLICE') ? 0.02 : this.scaleAlpha;
+            scale = 1.0 * (1 - sAlpha) + Math.min(1.1, Math.max(0.9, scale)) * sAlpha;
             this.baseSpread = currentSpread;
 
             const [rx, ry, rw, rh] = this.roi;
