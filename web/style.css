@@ -129,11 +129,12 @@ body {
 
 .hud-instruction {
     position: absolute;
-    bottom: 80px;
+    bottom: 120px;
     right: 20px;
     font-size: 0.6rem;
     opacity: 0.6;
     pointer-events: none;
+    text-shadow: 0 0 5px #000;
 }
 
 /* Tracking pod effects removed as per user request */

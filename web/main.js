@@ -14,6 +14,7 @@ const resetBtn = document.getElementById('reset-btn');
 // Sensor State
 let zoomScale = 1;
 const panOffset = { x: 0.5, y: 0.5 }; // Range 0 to 1
+let isIsolateMode = false;
 
 let camera, tracker, ui;
 let lastTime = 0;
@@ -56,6 +57,43 @@ async function start() {
         zoomBtn.innerText = `ZOOM: ${zoomScale}X`;
     };
 
+    // Contrast Isolation Controls
+    const gainBtn = document.getElementById('level-mode-btn');
+    const lvlBtn = document.getElementById('level-center-btn');
+    const widBtn = document.getElementById('level-width-btn');
+    const isolateBtn = document.getElementById('isolate-btn');
+
+    gainBtn.onclick = () => {
+        tracker.levelMode = tracker.levelMode === 'AUTO' ? 'SLICE' : 'AUTO';
+        gainBtn.innerText = `GAIN: ${tracker.levelMode}`;
+        lvlBtn.style.display = tracker.levelMode === 'SLICE' ? 'block' : 'none';
+        widBtn.style.display = tracker.levelMode === 'SLICE' ? 'block' : 'none';
+    };
+
+    lvlBtn.onclick = () => {
+        tracker.levelCenter = (tracker.levelCenter + 32) % 256;
+        lvlBtn.innerText = `LVL: ${tracker.levelCenter}`;
+    };
+
+    widBtn.onclick = () => {
+        tracker.levelWidth = tracker.levelWidth === 2 ? 64 : Math.max(2, tracker.levelWidth / 2);
+        if (tracker.levelWidth === 64) tracker.levelWidth = 128;
+        else if (tracker.levelWidth === 128) tracker.levelWidth = 2;
+
+        // Simpler cycle: 128 -> 64 -> 32 -> 16 -> 8 -> 4 -> 2
+        let w = tracker.levelWidth;
+        if (w === 2) w = 128;
+        else w = w / 2;
+        tracker.levelWidth = w;
+        widBtn.innerText = `WID: ${tracker.levelWidth}`;
+    };
+
+    isolateBtn.onclick = () => {
+        isIsolateMode = !isIsolateMode;
+        isolateBtn.innerText = isIsolateMode ? "ISOL" : "NORM";
+        isolateBtn.style.color = isIsolateMode ? "#ffff00" : "#00ff41";
+    };
+
     // Slew logic
     const slew = (dx, dy) => {
         const step = 0.05 / zoomScale;
@@ -72,13 +110,11 @@ async function start() {
 }
 
 function loop(timestamp) {
-    // Safety guard: Wait for valid video dimensions
     if (video.videoWidth === 0 || video.videoHeight === 0) {
         requestAnimationFrame(loop);
         return;
     }
 
-    // Reset tracker if dimensions change (prevents WASM size mismatch crash)
     if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
@@ -101,18 +137,26 @@ function loop(timestamp) {
     }
     frames++;
 
-    // Calculate source rect for Zoom/Pan
     const sw = video.videoWidth / zoomScale;
     const sh = video.videoHeight / zoomScale;
     const sx = (video.videoWidth - sw) * panOffset.x;
     const sy = (video.videoHeight - sh) * panOffset.y;
 
-    // Draw transformed video to canvas
     ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
 
     let frame;
     try {
         frame = cv.imread(canvas);
+
+        // Apply visual isolation if enabled
+        if (isIsolateMode) {
+            let gray = new cv.Mat();
+            cv.cvtColor(frame, gray, cv.COLOR_RGBA2GRAY);
+            tracker.enhanceContrast(gray, new cv.Rect(0, 0, gray.cols, gray.rows));
+            cv.cvtColor(gray, frame, cv.COLOR_GRAY2RGBA);
+            cv.imshow(canvas, frame);
+            gray.delete();
+        }
 
         const newRoi = ui.consumeROI();
         if (newRoi) {
