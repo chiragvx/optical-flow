@@ -1,14 +1,14 @@
 export class Camera {
     constructor(videoElement) {
-        self.video = videoElement;
-        self.stream = null;
-        self.facingMode = "environment"; // Default to rear camera
+        this.video = videoElement;
+        this.stream = null;
+        this.facingMode = "environment"; // Default to rear camera
     }
 
     async init() {
         const constraints = {
             video: {
-                facingMode: self.facingMode,
+                facingMode: this.facingMode,
                 width: { ideal: 1280 },
                 height: { ideal: 720 }
             },
@@ -16,9 +16,9 @@ export class Camera {
         };
 
         try {
-            self.stream = await navigator.mediaDevices.getUserMedia(constraints);
-            self.video.srcObject = self.stream;
-            await self.video.play();
+            this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+            this.video.srcObject = this.stream;
+            await this.video.play();
             return true;
         } catch (e) {
             console.error("Camera init error:", e);
@@ -27,10 +27,10 @@ export class Camera {
     }
 
     async switch() {
-        self.facingMode = self.facingMode === "user" ? "environment" : "user";
-        if (self.stream) {
-            self.stream.getTracks().forEach(track => track.stop());
+        this.facingMode = this.facingMode === "user" ? "environment" : "user";
+        if (this.stream) {
+            this.stream.getTracks().forEach(track => track.stop());
         }
-        return await self.init();
+        return await this.init();
     }
 }
