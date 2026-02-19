@@ -53,25 +53,34 @@
             </main>
 
             <footer class="hud-footer">
-                <div class="control-group">
-                    <button id="camera-toggle" class="hud-btn">CAM</button>
-                    <button id="isolate-btn" class="hud-btn">NORM</button>
-                    <button id="reset-btn" class="hud-btn">RESET</button>
-                </div>
-
-                <div class="control-group">
-                    <button id="sensor-toggle" class="hud-btn">CALIB</button>
-                    <button id="level-mode-btn" class="hud-btn">GAIN: AUTO</button>
-                    <button id="zoom-btn" class="hud-btn">ZOOM: 1X</button>
-                </div>
-
-                <div class="slew-controls">
-                    <button id="slew-up" class="slew-btn">▲</button>
-                    <div class="slew-row">
-                        <button id="slew-left" class="slew-btn">◀</button>
-                        <button id="slew-right" class="slew-btn">▶</button>
+                <div class="footer-top">
+                    <div class="control-group">
+                        <button id="camera-toggle" class="hud-btn">CAM</button>
+                        <button id="isolate-btn" class="hud-btn">NORM</button>
+                        <button id="reset-btn" class="hud-btn">RESET</button>
                     </div>
-                    <button id="slew-down" class="slew-btn">▼</button>
+
+                    <div class="zoom-controls">
+                        <button id="zoom-out" class="hud-btn">-</button>
+                        <div id="mag-display" class="mag-val">1X</div>
+                        <button id="zoom-in" class="hud-btn">+</button>
+                    </div>
+                </div>
+
+                <div class="footer-bottom">
+                    <div class="control-group">
+                        <button id="sensor-toggle" class="hud-btn">CALIB</button>
+                        <button id="level-mode-btn" class="hud-btn">AUTO</button>
+                    </div>
+
+                    <div class="slew-controls">
+                        <button id="slew-up" class="slew-btn">▲</button>
+                        <div class="slew-row">
+                            <button id="slew-left" class="slew-btn">◀</button>
+                            <button id="slew-right" class="slew-btn">▶</button>
+                        </div>
+                        <button id="slew-down" class="slew-btn">▼</button>
+                    </div>
                 </div>
             </footer>
         </div>

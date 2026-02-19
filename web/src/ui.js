@@ -63,11 +63,33 @@ export class UIManager {
 
     getPos(e) {
         const rect = this.canvas.getBoundingClientRect();
-        const scaleX = this.canvas.width / rect.width;
-        const scaleY = this.canvas.height / rect.height;
+
+        // Calculate the actual image area inside the 'object-fit: contain' canvas
+        const canvasAspect = rect.width / rect.height;
+        const videoAspect = this.canvas.width / this.canvas.height;
+
+        let actualWidth, actualHeight, offsetX, offsetY;
+
+        if (canvasAspect > videoAspect) {
+            // Letterboxed on the sides
+            actualHeight = rect.height;
+            actualWidth = actualHeight * videoAspect;
+            offsetX = (rect.width - actualWidth) / 2;
+            offsetY = 0;
+        } else {
+            // Letterboxed on top/bottom
+            actualWidth = rect.width;
+            actualHeight = actualWidth / videoAspect;
+            offsetX = 0;
+            offsetY = (rect.height - actualHeight) / 2;
+        }
+
+        const scaleX = this.canvas.width / actualWidth;
+        const scaleY = this.canvas.height / actualHeight;
+
         return {
-            x: (e.clientX - rect.left) * scaleX,
-            y: (e.clientY - rect.top) * scaleY
+            x: (e.clientX - rect.left - offsetX) * scaleX,
+            y: (e.clientY - rect.top - offsetY) * scaleY
         };
     }
 

@@ -51,11 +51,51 @@ async function start() {
         tracker.roi = null;
     };
 
-    const zoomBtn = document.getElementById('zoom-btn');
-    zoomBtn.onclick = () => {
-        zoomScale = zoomScale === 4 ? 1 : zoomScale * 2;
-        zoomBtn.innerText = `ZOOM: ${zoomScale}X`;
+    // Refined Zoom (+/-) logic
+    const magEl = document.getElementById('mag-display');
+    const updateZoom = (delta) => {
+        const scales = [1, 2, 4, 8, 16];
+        let idx = scales.indexOf(zoomScale);
+        idx = Math.max(0, Math.min(scales.length - 1, idx + delta));
+        zoomScale = scales[idx];
+        magEl.innerText = `${zoomScale}X`;
     };
+
+    document.getElementById('zoom-in').onclick = () => updateZoom(1);
+    document.getElementById('zoom-out').onclick = () => updateZoom(-1);
+
+    // Continuous Slew Logic (Press and Hold)
+    let slewInterval = null;
+    const startSlew = (dx, dy) => {
+        if (slewInterval) return;
+        const slewStep = () => {
+            const step = 0.02 / zoomScale; // Constant speed
+            panOffset.x = Math.max(0, Math.min(1, panOffset.x + dx * step));
+            panOffset.y = Math.max(0, Math.min(1, panOffset.y + dy * step));
+        };
+        slewStep();
+        slewInterval = setInterval(slewStep, 50);
+    };
+
+    const stopSlew = () => {
+        if (slewInterval) {
+            clearInterval(slewInterval);
+            slewInterval = null;
+        }
+    };
+
+    const bindSlew = (id, dx, dy) => {
+        const btn = document.getElementById(id);
+        btn.addEventListener('mousedown', () => startSlew(dx, dy));
+        btn.addEventListener('touchstart', (e) => { e.preventDefault(); startSlew(dx, dy); });
+        window.addEventListener('mouseup', stopSlew);
+        window.addEventListener('touchend', stopSlew);
+    };
+
+    bindSlew('slew-up', 0, -1);
+    bindSlew('slew-down', 0, 1);
+    bindSlew('slew-left', -1, 0);
+    bindSlew('slew-right', 1, 0);
 
     // Contrast Isolation Controls
     const gainBtn = document.getElementById('level-mode-btn');
@@ -63,7 +103,8 @@ async function start() {
 
     gainBtn.onclick = () => {
         tracker.levelMode = tracker.levelMode === 'AUTO' ? 'SLICE' : 'AUTO';
-        gainBtn.innerText = `GAIN: ${tracker.levelMode}`;
+        gainBtn.innerText = tracker.levelMode;
+        gainBtn.style.color = tracker.levelMode === 'SLICE' ? 'var(--accent)' : 'var(--primary)';
     };
 
     isolateBtn.onclick = () => {
@@ -71,18 +112,6 @@ async function start() {
         isolateBtn.innerText = isIsolateMode ? "ISOL" : "NORM";
         isolateBtn.style.color = isIsolateMode ? "#ffff00" : "#00ff41";
     };
-
-    // Slew logic
-    const slew = (dx, dy) => {
-        const step = 0.05 / zoomScale;
-        panOffset.x = Math.max(0, Math.min(1, panOffset.x + dx * step));
-        panOffset.y = Math.max(0, Math.min(1, panOffset.y + dy * step));
-    };
-
-    document.getElementById('slew-up').onclick = () => slew(0, -1);
-    document.getElementById('slew-down').onclick = () => slew(0, 1);
-    document.getElementById('slew-left').onclick = () => slew(-1, 0);
-    document.getElementById('slew-right').onclick = () => slew(1, 0);
 
     // Sensor Calibration Sliders
     const sensorPanel = document.getElementById('sensor-panel');

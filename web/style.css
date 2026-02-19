@@ -1,6 +1,5 @@
 :root {
     --primary: #00ff41;
-    /* CRT Green */
     --accent: #ffff00;
     --bg: #000b00;
     --border: rgba(0, 255, 65, 0.3);
@@ -11,6 +10,8 @@
     margin: 0;
     padding: 0;
     font-family: 'Courier New', Courier, monospace;
+    user-select: none;
+    touch-action: manipulation;
 }
 
 body {
@@ -18,47 +19,45 @@ body {
     color: var(--primary);
     overflow: hidden;
     position: fixed;
-    width: 100%;
-    height: 100%;
+    width: 100vw;
+    height: 100vh;
 }
 
 .hud-container {
-    position: relative;
-    width: 100vw;
-    height: 100vh;
+    position: absolute;
+    inset: 0;
     display: flex;
     flex-direction: column;
 }
 
 .hud-header {
-    padding: 15px;
+    padding: 10px 15px;
     display: flex;
     justify-content: space-between;
-    background: linear-gradient(to bottom, rgba(0, 30, 0, 0.8), transparent);
-    z-index: 10;
+    background: linear-gradient(to bottom, rgba(0, 30, 0, 0.9), transparent);
+    z-index: 20;
 }
 
 .hud-logo {
     font-weight: bold;
-    font-size: 1.2rem;
+    font-size: 1rem;
 }
 
 .hud-metric {
     color: var(--accent);
+    font-size: 0.9rem;
 }
 
 .viewscreen {
     flex: 1;
     position: relative;
     background: #000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    overflow: hidden;
 }
 
 #canvas {
-    max-width: 100%;
-    max-height: 100%;
+    width: 100%;
+    height: 100%;
     object-fit: contain;
 }
 
@@ -68,34 +67,58 @@ body {
     background: rgba(255, 255, 0, 0.1);
     pointer-events: none;
     display: none;
-    box-shadow: 0 0 15px var(--accent);
 }
 
+/* Footer / Controls */
 .hud-footer {
-    padding: 10px 20px;
+    background: linear-gradient(to top, rgba(0, 30, 0, 0.9), transparent);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 20;
+}
+
+.footer-top,
+.footer-bottom {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: linear-gradient(to top, rgba(0, 30, 0, 0.8), transparent);
-    z-index: 10;
 }
 
 .control-group {
     display: flex;
-    gap: 10px;
+    gap: 8px;
 }
 
 .hud-btn {
-    padding: 8px 12px;
-    background: transparent;
+    padding: 12px 15px;
+    background: rgba(0, 40, 0, 0.5);
     border: 1px solid var(--primary);
     color: var(--primary);
     text-transform: uppercase;
+    font-size: 0.7rem;
     cursor: pointer;
-    font-size: 0.75rem;
-    min-width: 60px;
+    min-width: 50px;
 }
 
+.zoom-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid var(--border);
+    padding: 2px;
+}
+
+.mag-val {
+    color: var(--accent);
+    font-weight: bold;
+    font-size: 0.8rem;
+    width: 40px;
+    text-align: center;
+}
+
+/* Slew Pad */
 .slew-controls {
     display: flex;
     flex-direction: column;
@@ -105,17 +128,15 @@ body {
 
 .slew-row {
     display: flex;
-    gap: 15px;
+    gap: 10px;
 }
 
 .slew-btn {
-    width: 30px;
-    height: 30px;
-    background: transparent;
+    width: 35px;
+    height: 35px;
+    background: rgba(0, 40, 0, 0.5);
     border: 1px solid var(--primary);
     color: var(--primary);
-    cursor: pointer;
-    font-size: 0.8rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -131,28 +152,24 @@ body {
 .sensor-panel {
     position: absolute;
     right: -300px;
-    /* Hidden by default */
     top: 50%;
     transform: translateY(-50%);
     width: 260px;
-    background: rgba(0, 20, 0, 0.9);
+    background: rgba(0, 20, 0, 0.95);
     border: 1px solid var(--primary);
     padding: 20px;
-    transition: right 0.3s ease;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     z-index: 100;
-    box-shadow: -5px 0 15px rgba(0, 255, 65, 0.2);
 }
 
 .sensor-panel.active {
-    right: 20px;
+    right: 10px;
 }
 
 .panel-header {
     font-size: 0.8rem;
-    font-weight: bold;
-    margin-bottom: 20px;
+    margin-bottom: 15px;
     border-bottom: 1px solid var(--border);
-    padding-bottom: 5px;
     color: var(--accent);
 }
 
@@ -160,7 +177,6 @@ body {
     margin-bottom: 15px;
     display: flex;
     flex-direction: column;
-    gap: 5px;
 }
 
 .control-row label {
@@ -174,41 +190,86 @@ body {
     align-self: flex-end;
 }
 
-/* Custom Sliders */
 input[type="range"] {
     -webkit-appearance: none;
+    appearance: none;
     width: 100%;
     background: transparent;
+    height: 30px;
 }
 
 input[type="range"]::-webkit-slider-runnable-track {
-    width: 100%;
     height: 4px;
     background: var(--border);
-    border: none;
 }
 
 input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
-    height: 14px;
-    width: 14px;
+    appearance: none;
+    height: 20px;
+    width: 20px;
     background: var(--primary);
-    margin-top: -5px;
-    cursor: pointer;
-    box-shadow: 0 0 5px var(--primary);
+    margin-top: -8px;
+    box-shadow: 0 0 10px var(--primary);
 }
 
 .hud-instruction {
     position: absolute;
-    bottom: 120px;
-    right: 20px;
+    left: 10px;
+    bottom: 110px;
     font-size: 0.6rem;
     opacity: 0.6;
     pointer-events: none;
-    text-shadow: 0 0 5px #000;
 }
 
-/* Tracking pod effects removed as per user request */
-#canvas {
-    filter: none;
+/* Orientation Adaptivity */
+@media (orientation: landscape) {
+    .hud-footer {
+        position: absolute;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        width: 180px;
+        background: rgba(0, 20, 0, 0.8);
+        padding: 40px 10px;
+        justify-content: space-around;
+        flex-direction: column;
+    }
+
+    .footer-top,
+    .footer-bottom {
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .hud-header {
+        width: calc(100% - 180px);
+    }
+
+    .sensor-panel {
+        left: 10px;
+        right: auto;
+        transform: translateY(-50%) translateX(-400px);
+    }
+
+    .sensor-panel.active {
+        transform: translateY(-50%) translateX(0);
+    }
+}
+
+@media (max-width: 600px) {
+    .sensor-panel {
+        bottom: -400px;
+        top: auto;
+        left: 0;
+        right: 0;
+        width: 100%;
+        transform: none;
+        transition: bottom 0.3s ease;
+    }
+
+    .sensor-panel.active {
+        bottom: 0;
+        right: 0;
+    }
 }
