@@ -99,6 +99,10 @@ export class Tracker {
             }
             mask.copyTo(roiGray);
             hsv.delete(); mask.delete();
+        } else if (this.levelMode === 'SKY') {
+            // Binary Threshold for Aerial Targets
+            // LVL acts as the threshold. Pixels > LVL become 255 (Background), <= LVL become 0 (Target)
+            cv.threshold(roiGray, roiGray, this.levelCenter, 255, cv.THRESH_BINARY);
         } else {
             // Smart Auto
             if (this.clahe) this.clahe.apply(roiGray, roiGray);

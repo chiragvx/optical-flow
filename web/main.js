@@ -110,11 +110,17 @@ async function start() {
         const sat = document.getElementById('sat-ctrl');
         const val = document.getElementById('val-ctrl-min');
 
-        if (lvl) lvl.style.display = (mode === 'SLICE') ? 'block' : 'none';
+        if (lvl) lvl.style.display = (mode === 'SLICE' || mode === 'SKY') ? 'block' : 'none';
         if (wid) wid.style.display = (mode === 'SLICE') ? 'block' : 'none';
         if (hue) hue.style.display = (mode === 'CHROMA') ? 'block' : 'none';
         if (sat) sat.style.display = (mode === 'CHROMA') ? 'block' : 'none';
         if (val) val.style.display = (mode === 'CHROMA') ? 'block' : 'none';
+
+        // Update LVL label based on mode
+        if (lvl) {
+            const label = lvl.querySelector('label');
+            label.innerText = mode === 'SKY' ? 'THR' : 'LVL';
+        }
 
         // Highlight GAIN button if non-auto
         gainBtn.style.borderWidth = mode === 'AUTO' ? '1px' : '2px';
@@ -122,7 +128,7 @@ async function start() {
     };
 
     gainBtn.onclick = () => {
-        const modes = ['AUTO', 'SLICE', 'CHROMA'];
+        const modes = ['AUTO', 'SLICE', 'CHROMA', 'SKY'];
         let idx = modes.indexOf(tracker.levelMode);
         tracker.levelMode = modes[(idx + 1) % modes.length];
         gainBtn.innerText = tracker.levelMode;
