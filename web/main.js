@@ -59,33 +59,11 @@ async function start() {
 
     // Contrast Isolation Controls
     const gainBtn = document.getElementById('level-mode-btn');
-    const lvlBtn = document.getElementById('level-center-btn');
-    const widBtn = document.getElementById('level-width-btn');
     const isolateBtn = document.getElementById('isolate-btn');
 
     gainBtn.onclick = () => {
         tracker.levelMode = tracker.levelMode === 'AUTO' ? 'SLICE' : 'AUTO';
         gainBtn.innerText = `GAIN: ${tracker.levelMode}`;
-        lvlBtn.style.display = tracker.levelMode === 'SLICE' ? 'block' : 'none';
-        widBtn.style.display = tracker.levelMode === 'SLICE' ? 'block' : 'none';
-    };
-
-    lvlBtn.onclick = () => {
-        tracker.levelCenter = (tracker.levelCenter + 32) % 256;
-        lvlBtn.innerText = `LVL: ${tracker.levelCenter}`;
-    };
-
-    widBtn.onclick = () => {
-        tracker.levelWidth = tracker.levelWidth === 2 ? 64 : Math.max(2, tracker.levelWidth / 2);
-        if (tracker.levelWidth === 64) tracker.levelWidth = 128;
-        else if (tracker.levelWidth === 128) tracker.levelWidth = 2;
-
-        // Simpler cycle: 128 -> 64 -> 32 -> 16 -> 8 -> 4 -> 2
-        let w = tracker.levelWidth;
-        if (w === 2) w = 128;
-        else w = w / 2;
-        tracker.levelWidth = w;
-        widBtn.innerText = `WID: ${tracker.levelWidth}`;
     };
 
     isolateBtn.onclick = () => {
