@@ -38,16 +38,34 @@
                         <span id="con-val">1.0</span>
                     </div>
 
-                    <div class="control-row">
+                    <div class="control-row" id="lvl-ctrl">
                         <label>LVL</label>
                         <input type="range" id="lvl-slider" min="0" max="255" value="127">
                         <span id="lvl-val">127</span>
                     </div>
 
-                    <div class="control-row">
+                    <div class="control-row" id="wid-ctrl">
                         <label>WID</label>
                         <input type="range" id="wid-slider" min="2" max="255" value="64">
                         <span id="wid-val">64</span>
+                    </div>
+
+                    <div class="control-row" id="hue-ctrl" style="display:none">
+                        <label>HUE</label>
+                        <input type="range" id="hue-slider" min="0" max="180" value="0">
+                        <span id="hue-val">0</span>
+                    </div>
+
+                    <div class="control-row" id="sat-ctrl" style="display:none">
+                        <label>SAT</label>
+                        <input type="range" id="sat-slider" min="0" max="255" value="50">
+                        <span id="sat-val">50</span>
+                    </div>
+
+                    <div class="control-row" id="val-ctrl-min" style="display:none">
+                        <label>VAL</label>
+                        <input type="range" id="val-slider-min" min="0" max="255" value="50">
+                        <span id="val-val-min">50</span>
                     </div>
                 </div>
             </main>

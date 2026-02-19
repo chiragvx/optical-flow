@@ -101,10 +101,33 @@ async function start() {
     const gainBtn = document.getElementById('level-mode-btn');
     const isolateBtn = document.getElementById('isolate-btn');
 
+    const updateControlVisibility = () => {
+        const mode = tracker.levelMode;
+
+        const lvl = document.getElementById('lvl-ctrl');
+        const wid = document.getElementById('wid-ctrl');
+        const hue = document.getElementById('hue-ctrl');
+        const sat = document.getElementById('sat-ctrl');
+        const val = document.getElementById('val-ctrl-min');
+
+        if (lvl) lvl.style.display = (mode === 'SLICE') ? 'block' : 'none';
+        if (wid) wid.style.display = (mode === 'SLICE') ? 'block' : 'none';
+        if (hue) hue.style.display = (mode === 'CHROMA') ? 'block' : 'none';
+        if (sat) sat.style.display = (mode === 'CHROMA') ? 'block' : 'none';
+        if (val) val.style.display = (mode === 'CHROMA') ? 'block' : 'none';
+
+        // Highlight GAIN button if non-auto
+        gainBtn.style.borderWidth = mode === 'AUTO' ? '1px' : '2px';
+        gainBtn.style.boxShadow = mode === 'AUTO' ? 'none' : '0 0 10px var(--accent)';
+    };
+
     gainBtn.onclick = () => {
-        tracker.levelMode = tracker.levelMode === 'AUTO' ? 'SLICE' : 'AUTO';
+        const modes = ['AUTO', 'SLICE', 'CHROMA'];
+        let idx = modes.indexOf(tracker.levelMode);
+        tracker.levelMode = modes[(idx + 1) % modes.length];
         gainBtn.innerText = tracker.levelMode;
-        gainBtn.style.color = tracker.levelMode === 'SLICE' ? 'var(--accent)' : 'var(--primary)';
+        gainBtn.style.color = tracker.levelMode === 'AUTO' ? 'var(--primary)' : 'var(--accent)';
+        updateControlVisibility();
     };
 
     isolateBtn.onclick = () => {
@@ -121,11 +144,13 @@ async function start() {
         sensorPanel.classList.toggle('active');
         sensorToggle.style.background = sensorPanel.classList.contains('active') ? 'var(--primary)' : 'transparent';
         sensorToggle.style.color = sensorPanel.classList.contains('active') ? 'var(--bg)' : 'var(--primary)';
+        updateControlVisibility();
     };
 
     const setupSlider = (id, valId, prop) => {
         const slider = document.getElementById(id);
         const val = document.getElementById(valId);
+        if (!slider || !val) return;
         slider.oninput = () => {
             let value = parseFloat(slider.value);
             tracker[prop] = value;
@@ -137,7 +162,11 @@ async function start() {
     setupSlider('con-slider', 'con-val', 'contrast');
     setupSlider('lvl-slider', 'lvl-val', 'levelCenter');
     setupSlider('wid-slider', 'wid-val', 'levelWidth');
+    setupSlider('hue-slider', 'hue-val', 'hueCenter');
+    setupSlider('sat-slider', 'sat-val', 'satMin');
+    setupSlider('val-slider-min', 'val-val-min', 'valMin');
 
+    updateControlVisibility();
     requestAnimationFrame(loop);
 }
 
