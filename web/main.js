@@ -11,14 +11,12 @@ const statusEl = document.getElementById('status');
 const camToggle = document.getElementById('camera-toggle');
 const resetBtn = document.getElementById('reset-btn');
 
-let camera, tracker, ui;
-let lastTime = 0;
-let lastFpsUpdate = 0;
-let frames = 0;
-let fps = 0;
+// Sensor State
+let zoomScale = 1;
+const panOffset = { x: 0.5, y: 0.5 }; // Range 0 to 1
 
 async function start() {
-    // Wait for OpenCV and its core constructors to be ready
+    // ... wait for CV ...
     if (typeof cv === 'undefined' || !cv.Mat) {
         setTimeout(start, 50);
         return;
@@ -30,10 +28,10 @@ async function start() {
 
     await camera.init();
 
-    // Set canvas size to match video aspect ratio
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
 
+    // Controls
     camToggle.onclick = async () => {
         statusEl.innerText = "STATUS: INITIALIZING CAM";
         await camera.switch();
@@ -46,6 +44,24 @@ async function start() {
         tracker.roi = null;
     };
 
+    const zoomBtn = document.getElementById('zoom-btn');
+    zoomBtn.onclick = () => {
+        zoomScale = zoomScale === 4 ? 1 : zoomScale * 2;
+        zoomBtn.innerText = `ZOOM: ${zoomScale}X`;
+    };
+
+    // Slew logic
+    const slew = (dx, dy) => {
+        const step = 0.05 / zoomScale;
+        panOffset.x = Math.max(0, Math.min(1, panOffset.x + dx * step));
+        panOffset.y = Math.max(0, Math.min(1, panOffset.y + dy * step));
+    };
+
+    document.getElementById('slew-up').onclick = () => slew(0, -1);
+    document.getElementById('slew-down').onclick = () => slew(0, 1);
+    document.getElementById('slew-left').onclick = () => slew(-1, 0);
+    document.getElementById('slew-right').onclick = () => slew(1, 0);
+
     requestAnimationFrame(loop);
 }
 
@@ -53,12 +69,10 @@ function loop(timestamp) {
     if (!lastTime) lastTime = timestamp;
     if (!lastFpsUpdate) lastFpsUpdate = timestamp;
 
-    // Calculate per-frame Delta Time
     const dt_ms = timestamp - lastTime;
     lastTime = timestamp;
-    const dt = dt_ms / 16.67; // Normalized to 60fps base
+    const dt = dt_ms / 16.67;
 
-    // Calculate FPS every second
     if (timestamp - lastFpsUpdate >= 1000) {
         fps = frames;
         frames = 0;
@@ -67,34 +81,33 @@ function loop(timestamp) {
     }
     frames++;
 
-    // Draw video to canvas
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    // Calculate source rect for Zoom/Pan
+    const sw = video.videoWidth / zoomScale;
+    const sh = video.videoHeight / zoomScale;
+    const sx = (video.videoWidth - sw) * panOffset.x;
+    const sy = (video.videoHeight - sh) * panOffset.y;
 
-    // Get current frame for OpenCV
+    // Draw transformed video to canvas
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+
     const frame = cv.imread(canvas);
 
-    // Handle new ROI selection
     const newRoi = ui.consumeROI();
     if (newRoi) {
         tracker.init(frame, newRoi);
     }
 
-    // Update tracking with dynamic DT
     const result = tracker.update(frame, dt);
 
-
-    // UI Feedback
     statusEl.innerText = `STATUS: ${tracker.status}`;
     statusEl.style.color = tracker.status === "LOCKED" ? "#00ff41" : "#ffff00";
 
-    // Overlay drawing
     if (tracker.status === "LOCKED" && tracker.roi) {
         const [x, y, w, h] = tracker.roi;
         ctx.strokeStyle = '#00ff41';
         ctx.lineWidth = 2;
         ctx.strokeRect(x, y, w, h);
 
-        // Draw points
         if (result && result.points) {
             ctx.fillStyle = '#ffff00';
             result.points.forEach(p => {

@@ -72,34 +72,68 @@ body {
 }
 
 .hud-footer {
-    padding: 20px;
+    padding: 10px 20px;
     display: flex;
-    gap: 15px;
+    justify-content: space-between;
     align-items: center;
     background: linear-gradient(to top, rgba(0, 30, 0, 0.8), transparent);
     z-index: 10;
 }
 
+.control-group {
+    display: flex;
+    gap: 10px;
+}
+
 .hud-btn {
-    padding: 10px 15px;
+    padding: 8px 12px;
     background: transparent;
     border: 1px solid var(--primary);
     color: var(--primary);
     text-transform: uppercase;
     cursor: pointer;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
+    min-width: 60px;
 }
 
-.hud-btn:active {
+.slew-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.slew-row {
+    display: flex;
+    gap: 15px;
+}
+
+.slew-btn {
+    width: 30px;
+    height: 30px;
+    background: transparent;
+    border: 1px solid var(--primary);
+    color: var(--primary);
+    cursor: pointer;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.hud-btn:active,
+.slew-btn:active {
     background: var(--primary);
     color: var(--bg);
 }
 
 .hud-instruction {
-    flex: 1;
-    text-align: right;
-    font-size: 0.7rem;
-    opacity: 0.8;
+    position: absolute;
+    bottom: 80px;
+    right: 20px;
+    font-size: 0.6rem;
+    opacity: 0.6;
+    pointer-events: none;
 }
 
 /* Tracking pod effects removed as per user request */

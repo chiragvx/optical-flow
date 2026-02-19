@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>SIGHT-LINE | Tracking Pod</title>
     <link rel="stylesheet" href="./style.css">
 </head>
+
 <body>
     <div id="app">
         <div class="hud-container">
@@ -22,13 +24,28 @@
             </main>
 
             <footer class="hud-footer">
-                <button id="camera-toggle" class="hud-btn">SWITCH CAM</button>
-                <button id="reset-btn" class="hud-btn">RESET</button>
-                <div class="hud-instruction">DRAG TO LOCK TARGET</div>
+                <div class="control-group">
+                    <button id="camera-toggle" class="hud-btn">CAM</button>
+                    <button id="reset-btn" class="hud-btn">RESET</button>
+                </div>
+
+                <div class="control-group">
+                    <button id="zoom-btn" class="hud-btn">ZOOM: 1X</button>
+                </div>
+
+                <div class="slew-controls">
+                    <button id="slew-up" class="slew-btn">▲</button>
+                    <div class="slew-row">
+                        <button id="slew-left" class="slew-btn">◀</button>
+                        <button id="slew-right" class="slew-btn">▶</button>
+                    </div>
+                    <button id="slew-down" class="slew-btn">▼</button>
+                </div>
             </footer>
         </div>
     </div>
     <script async src="./js/opencv.js" type="text/javascript"></script>
     <script type="module" src="./main.js"></script>
 </body>
+
 </html>
