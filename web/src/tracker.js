@@ -46,35 +46,78 @@ export class Tracker {
         const status = new cv.Mat();
         const err = new cv.Mat();
 
+        // 1. Forward Tracking
         cv.calcOpticalFlowPyrLK(this.prevGray, gray, this.p0, p1, status, err, this.winSize, this.maxLevel, this.criteria);
 
-        // Select good points
+        // 2. Backward Tracking (for consistency check)
+        const p0r = new cv.Mat();
+        const status_back = new cv.Mat();
+        const err_back = new cv.Mat();
+        cv.calcOpticalFlowPyrLK(gray, this.prevGray, p1, p0r, status_back, err_back, this.winSize, this.maxLevel, this.criteria);
+
+        // 3. Select good points based on status, error, and FB-consistency
         const points = [];
         let sumX = 0, sumY = 0, count = 0;
+        const FB_THRESHOLD = 1.0; // Dist in pixels
+        const ERR_THRESHOLD = 20.0; // Max allowed LK error
 
         for (let i = 0; i < status.rows; i++) {
-            if (status.data[i] === 1) {
-                const x = p1.data32F[i * 2];
-                const y = p1.data32F[i * 2 + 1];
-                points.push({ x, y });
-                sumX += x;
-                sumY += y;
-                count++;
+            if (status.data[i] === 1 && status_back.data[i] === 1) {
+                const x1 = p1.data32F[i * 2];
+                const y1 = p1.data32F[i * 2 + 1];
+                const x0 = this.p0.data32F[i * 2];
+                const y0 = this.p0.data32F[i * 2 + 1];
+                const xr = p0r.data32F[i * 2];
+                const yr = p0r.data32F[i * 2 + 1];
+
+                // Forward-Backward distance check
+                const fb_dist = Math.sqrt((x0 - xr) ** 2 + (y0 - yr) ** 2);
+
+                if (fb_dist < FB_THRESHOLD && err.data32F[i] < ERR_THRESHOLD) {
+                    points.push({ x: x1, y: y1 });
+                    sumX += x1;
+                    sumY += y1;
+                    count++;
+                } else {
+                    status.data[i] = 0; // Mark as bad for future use
+                }
             }
         }
+
+        p0r.delete(); status_back.delete(); err_back.delete();
 
         if (count > 0) {
             const centroidX = sumX / count;
             const centroidY = sumY / count;
             const [rx, ry, rw, rh] = this.roi;
-            this.roi = [centroidX - rw / 2, centroidY - rh / 2, rw, rh];
+
+            // 4. Temporal Smoothing (Exponential Moving Average)
+            const alpha = 0.4; // Smoothing factor
+            const targetX = centroidX - rw / 2;
+            const targetY = centroidY - rh / 2;
+            this.roi = [
+                this.roi[0] * (1 - alpha) + targetX * alpha,
+                this.roi[1] * (1 - alpha) + targetY * alpha,
+                rw,
+                rh
+            ];
 
             // Point refreshing logic
             if (count < 30) {
                 this.refreshPoints(gray);
             } else {
+                // Keep only the good points and update p0
+                const goodPoints = new cv.Mat(count, 1, cv.CV_32FC2);
+                let goodIdx = 0;
+                for (let i = 0; i < status.rows; i++) {
+                    if (status.data[i] === 1) {
+                        goodPoints.data32F[goodIdx * 2] = p1.data32F[i * 2];
+                        goodPoints.data32F[goodIdx * 2 + 1] = p1.data32F[i * 2 + 1];
+                        goodIdx++;
+                    }
+                }
                 this.p0.delete();
-                this.p0 = p1.clone();
+                this.p0 = goodPoints;
             }
 
             this.prevGray.delete();
@@ -88,6 +131,7 @@ export class Tracker {
         gray.delete(); p1.delete(); status.delete(); err.delete();
         return null;
     }
+
 
     refreshPoints(gray) {
         const [x, y, w, h] = this.roi;
