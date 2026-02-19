@@ -30,23 +30,38 @@ export class Tracker {
         this.levelMode = 'AUTO'; // 'AUTO' (CLAHE) or 'SLICE'
         this.levelCenter = 127;  // 0-255
         this.levelWidth = 64;    // 1-255
+
+        // Advanced Sensor Controls
+        this.exposure = 0;       // -100 to 100
+        this.contrast = 1.0;     // 0.5 to 3.0
     }
 
     enhanceContrast(gray, rect) {
         if (rect.width <= 0 || rect.height <= 0) return;
         const roi = gray.roi(rect);
 
+        // 1. Exposure (Brightness Offset)
+        if (this.exposure !== 0) {
+            roi.convertTo(roi, -1, 1.0, this.exposure);
+        }
+
+        // 2. Contrast (Linear Gain with 128 pivot)
+        if (this.contrast !== 1.0) {
+            const alpha = this.contrast;
+            const beta = 128 * (1 - alpha);
+            roi.convertTo(roi, -1, alpha, beta);
+        }
+
+        // 3. Level Slicing (Range Stretching)
         if (this.levelMode === 'SLICE') {
-            // Level Slicing: Stretch [Center - Width/2, Center + Width/2] to [0, 255]
             const low = Math.max(0, this.levelCenter - this.levelWidth / 2);
             const high = Math.min(255, this.levelCenter + this.levelWidth / 2);
             const range = high - low || 1;
             const alpha = 255 / range;
             const beta = -low * alpha;
-
             roi.convertTo(roi, -1, alpha, beta);
         } else {
-            // Default: Smart Auto (CLAHE or Equalize)
+            // Smart Auto
             if (this.clahe) this.clahe.apply(roi, roi);
             else cv.equalizeHist(roi, roi);
         }

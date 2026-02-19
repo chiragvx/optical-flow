@@ -127,6 +127,77 @@ body {
     color: var(--bg);
 }
 
+/* Sensor Calibration Panel */
+.sensor-panel {
+    position: absolute;
+    right: -300px;
+    /* Hidden by default */
+    top: 50%;
+    transform: translateY(-50%);
+    width: 260px;
+    background: rgba(0, 20, 0, 0.9);
+    border: 1px solid var(--primary);
+    padding: 20px;
+    transition: right 0.3s ease;
+    z-index: 100;
+    box-shadow: -5px 0 15px rgba(0, 255, 65, 0.2);
+}
+
+.sensor-panel.active {
+    right: 20px;
+}
+
+.panel-header {
+    font-size: 0.8rem;
+    font-weight: bold;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 5px;
+    color: var(--accent);
+}
+
+.control-row {
+    margin-bottom: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.control-row label {
+    font-size: 0.6rem;
+    opacity: 0.8;
+}
+
+.control-row span {
+    font-size: 0.7rem;
+    color: var(--accent);
+    align-self: flex-end;
+}
+
+/* Custom Sliders */
+input[type="range"] {
+    -webkit-appearance: none;
+    width: 100%;
+    background: transparent;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 4px;
+    background: var(--border);
+    border: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    height: 14px;
+    width: 14px;
+    background: var(--primary);
+    margin-top: -5px;
+    cursor: pointer;
+    box-shadow: 0 0 5px var(--primary);
+}
+
 .hud-instruction {
     position: absolute;
     bottom: 120px;

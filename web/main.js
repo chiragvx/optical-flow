@@ -106,6 +106,31 @@ async function start() {
     document.getElementById('slew-left').onclick = () => slew(-1, 0);
     document.getElementById('slew-right').onclick = () => slew(1, 0);
 
+    // Sensor Calibration Sliders
+    const sensorPanel = document.getElementById('sensor-panel');
+    const sensorToggle = document.getElementById('sensor-toggle');
+
+    sensorToggle.onclick = () => {
+        sensorPanel.classList.toggle('active');
+        sensorToggle.style.background = sensorPanel.classList.contains('active') ? 'var(--primary)' : 'transparent';
+        sensorToggle.style.color = sensorPanel.classList.contains('active') ? 'var(--bg)' : 'var(--primary)';
+    };
+
+    const setupSlider = (id, valId, prop) => {
+        const slider = document.getElementById(id);
+        const val = document.getElementById(valId);
+        slider.oninput = () => {
+            let value = parseFloat(slider.value);
+            tracker[prop] = value;
+            val.innerText = value.toFixed(prop === 'contrast' ? 1 : 0);
+        };
+    };
+
+    setupSlider('exp-slider', 'exp-val', 'exposure');
+    setupSlider('con-slider', 'con-val', 'contrast');
+    setupSlider('lvl-slider', 'lvl-val', 'levelCenter');
+    setupSlider('wid-slider', 'wid-val', 'levelWidth');
+
     requestAnimationFrame(loop);
 }
 

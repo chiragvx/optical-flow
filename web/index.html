@@ -21,19 +21,47 @@
                 <video id="video" playsinline muted style="display:none"></video>
                 <canvas id="canvas"></canvas>
                 <div id="selection-overlay" class="selection-overlay"></div>
+
+                <!-- Advanced Sensor Panel -->
+                <div id="sensor-panel" class="sensor-panel">
+                    <div class="panel-header">SENSOR CALIBRATION</div>
+
+                    <div class="control-row">
+                        <label>EXP</label>
+                        <input type="range" id="exp-slider" min="-100" max="100" value="0">
+                        <span id="exp-val">0</span>
+                    </div>
+
+                    <div class="control-row">
+                        <label>CON</label>
+                        <input type="range" id="con-slider" min="0.5" max="3.0" step="0.1" value="1.0">
+                        <span id="con-val">1.0</span>
+                    </div>
+
+                    <div class="control-row">
+                        <label>LVL</label>
+                        <input type="range" id="lvl-slider" min="0" max="255" value="127">
+                        <span id="lvl-val">127</span>
+                    </div>
+
+                    <div class="control-row">
+                        <label>WID</label>
+                        <input type="range" id="wid-slider" min="2" max="255" value="64">
+                        <span id="wid-val">64</span>
+                    </div>
+                </div>
             </main>
 
             <footer class="hud-footer">
                 <div class="control-group">
-                    <button id="camera-toggle" class="hud-btn" title="Switch Camera">CAM</button>
-                    <button id="isolate-btn" class="hud-btn" title="Toggle Vision Mode">NORM</button>
+                    <button id="camera-toggle" class="hud-btn">CAM</button>
+                    <button id="isolate-btn" class="hud-btn">NORM</button>
                     <button id="reset-btn" class="hud-btn">RESET</button>
                 </div>
 
                 <div class="control-group">
+                    <button id="sensor-toggle" class="hud-btn">CALIB</button>
                     <button id="level-mode-btn" class="hud-btn">GAIN: AUTO</button>
-                    <button id="level-center-btn" class="hud-btn" style="display:none">LVL: 127</button>
-                    <button id="level-width-btn" class="hud-btn" style="display:none">WID: 64</button>
                     <button id="zoom-btn" class="hud-btn">ZOOM: 1X</button>
                 </div>
 
