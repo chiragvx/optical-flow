@@ -10,19 +10,28 @@ export class Tracker {
         this.maxLevel = 2;
         this.criteria = new cv.TermCriteria(cv.TermCriteria_EPS | cv.TermCriteria_COUNT, 10, 0.03);
 
-        // CLAHE for dark objects
-        this.clahe = cv.createCLAHE(2.0, new cv.Size(8, 8));
+        // Resilient Contrast Enhancement
+        this.clahe = null;
+        try {
+            if (typeof cv.createCLAHE === 'function') {
+                this.clahe = cv.createCLAHE(2.0, new cv.Size(8, 8));
+            }
+        } catch (e) {
+            console.warn("CLAHE not supported in this build, using equalizeHist fallback.");
+        }
         this.scaleAlpha = 0.2; // Smoothing for scale changes
     }
 
-    applyCLAHE(gray, rect) {
+    enhanceContrast(gray, rect) {
         const roi = gray.roi(rect);
-        const enhanced = new cv.Mat();
-        this.clahe.apply(roi, enhanced);
-        enhanced.copyTo(roi);
-        enhanced.delete();
+        if (this.clahe) {
+            this.clahe.apply(roi, roi);
+        } else {
+            cv.equalizeHist(roi, roi);
+        }
         roi.delete();
     }
+
 
     init(frame, roi) {
         const [x, y, w, h] = roi;
@@ -39,7 +48,7 @@ export class Tracker {
         );
 
         if (rect.width > 0 && rect.height > 0) {
-            this.applyCLAHE(this.prevGray, rect);
+            this.enhanceContrast(this.prevGray, rect);
         }
 
         // Find features in ROI
@@ -188,7 +197,8 @@ export class Tracker {
         if (mw <= 10 || mh <= 10) return;
 
         const rect = new cv.Rect(mx, my, mw, mh);
-        this.applyCLAHE(gray, rect);
+        this.enhanceContrast(gray, rect);
+
 
         const mask = new cv.Mat.zeros(gray.rows, gray.cols, cv.CV_8UC1);
         mask.roi(rect).setTo(new cv.Scalar(255));
