@@ -74,6 +74,12 @@
                         <input type="range" id="val-slider-min" min="0" max="255" value="50">
                         <span id="val-val-min">50</span>
                     </div>
+
+                    <div class="control-row" title="Radar Min Movement (px²) — higher = less sensitive">
+                        <label>SENS</label>
+                        <input type="range" id="sens-slider" min="50" max="2000" value="200" step="50">
+                        <span id="sens-val">200</span>
+                    </div>
                 </div>
             </main>
 
@@ -83,6 +89,8 @@
                         <button id="camera-toggle" class="hud-btn">CAM</button>
                         <button id="isolate-btn" class="hud-btn">NORM</button>
                         <button id="radar-btn" class="hud-btn">RDR</button>
+                        <button id="prev-btn" class="hud-btn">◀TGT</button>
+                        <button id="next-btn" class="hud-btn">TGT▶</button>
                         <button id="reset-btn" class="hud-btn">RESET</button>
                     </div>
 
