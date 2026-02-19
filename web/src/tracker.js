@@ -210,6 +210,7 @@ export class Tracker {
             const medDY = getMedian(dys);
 
             // Adaptive Smoothing (High mass for high-contrast modes)
+            const currentVelocity = { x: medDX, y: medDY };
             const alpha = (this.levelMode === 'SKY' || this.levelMode === 'SLICE') ? 0.15 : this.moveAlpha;
             this.lastValidVelocity.x = this.lastValidVelocity.x * (1 - alpha) + currentVelocity.x * alpha;
             this.lastValidVelocity.y = this.lastValidVelocity.y * (1 - alpha) + currentVelocity.y * alpha;
