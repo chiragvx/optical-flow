@@ -62,8 +62,9 @@ export class Tracker {
 
             if (this.p0) this.p0.delete();
             this.p0 = new cv.Mat();
-            cv.goodFeaturesToTrack(this.prevGray, this.p0, 60, 0.02, 7, mask); // Fewer points for speed
+            cv.goodFeaturesToTrack(this.prevGray, this.p0, 150, 0.01, 7, mask); // Increased for accuracy
             mask.delete();
+
 
             if (this.p0.rows > 5) {
                 this.roi = roi;
@@ -150,9 +151,10 @@ export class Tracker {
             ];
 
             // 4. Lite Point Refreshing
-            if (count < 20) {
+            if (count < 40) { // Refresh sooner to maintain high point density
                 this.refreshPoints(gray);
             } else {
+
                 // Efficient Mat copy
                 const goodPoints = new cv.Mat(count, 1, cv.CV_32FC2);
                 let idx = 0;
