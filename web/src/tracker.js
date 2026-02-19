@@ -106,7 +106,7 @@ class KalmanFilter {
 
         z.delete(); Hx.delete(); y.delete(); Ht.delete(); PHt.delete();
         HPHt.delete(); S.delete(); Si.delete(); K.delete(); Ky.delete();
-        KH.delete(); I.delete(); IKH.delete();
+        KH.delete(); IKH.delete();
     }
 
     delete() {
