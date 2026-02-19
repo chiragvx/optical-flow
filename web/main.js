@@ -16,6 +16,14 @@ let zoomScale = 1;
 const panOffset = { x: 0.5, y: 0.5 }; // Range 0 to 1
 let isIsolateMode = false;
 
+// Radar Auto-Acquisition State
+let isRadarMode = false;
+let radarPrevGray = null;
+let radarCandidate = null; // { x, y, w, h }
+let radarStableFrames = 0;
+const RADAR_MIN_AREA = 200;
+const RADAR_STABLE_THRESHOLD = 5;
+
 let camera, tracker, ui;
 let lastTime = 0;
 let lastFpsUpdate = 0;
@@ -49,6 +57,22 @@ async function start() {
     resetBtn.onclick = () => {
         tracker.status = "STANDBY";
         tracker.roi = null;
+        radarCandidate = null;
+        radarStableFrames = 0;
+        if (radarPrevGray) { radarPrevGray.delete(); radarPrevGray = null; }
+    };
+
+    const radarBtn = document.getElementById('radar-btn');
+    radarBtn.onclick = () => {
+        isRadarMode = !isRadarMode;
+        radarBtn.innerText = isRadarMode ? '📡 RDR' : 'RDR';
+        radarBtn.style.color = isRadarMode ? 'var(--accent)' : 'var(--primary)';
+        radarBtn.style.borderWidth = isRadarMode ? '2px' : '1px';
+        radarBtn.style.boxShadow = isRadarMode ? '0 0 10px var(--accent)' : 'none';
+        radarCandidate = null;
+        radarStableFrames = 0;
+        if (radarPrevGray) { radarPrevGray.delete(); radarPrevGray = null; }
+        if (!isRadarMode) { tracker.status = "STANDBY"; tracker.roi = null; }
     };
 
     // Refined Zoom (+/-) logic
@@ -239,10 +263,110 @@ function loop(timestamp) {
             tracker.init(frame, newRoi);
         }
 
+        // ── RADAR AUTO-ACQUISITION ──────────────────────────────────────────
+        if (isRadarMode && tracker.status !== 'LOCKED') {
+            const currGray = new cv.Mat();
+            cv.cvtColor(frame, currGray, cv.COLOR_RGBA2GRAY);
+
+            if (radarPrevGray && radarPrevGray.rows === currGray.rows && radarPrevGray.cols === currGray.cols) {
+                // 1. Frame Differencing
+                const diff = new cv.Mat();
+                cv.absdiff(radarPrevGray, currGray, diff);
+
+                // 2. Threshold → binary mask of motion
+                cv.threshold(diff, diff, 20, 255, cv.THRESH_BINARY);
+
+                // 3. Dilate to connect fragments
+                const kernel = cv.Mat.ones(5, 5, cv.CV_8U);
+                cv.dilate(diff, diff, kernel, new cv.Point(-1, -1), 2);
+                kernel.delete();
+
+                // 4. Find Contours
+                const contours = new cv.MatVector();
+                const hierarchy = new cv.Mat();
+                cv.findContours(diff, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+                // 5. Filter & pick primary (largest) contact
+                let primaryContact = null;
+                let maxArea = RADAR_MIN_AREA;
+                const contacts = [];
+
+                for (let i = 0; i < contours.size(); i++) {
+                    const c = contours.get(i);
+                    const area = cv.contourArea(c);
+                    if (area > RADAR_MIN_AREA) {
+                        const rect = cv.boundingRect(c);
+                        contacts.push(rect);
+                        if (area > maxArea) {
+                            maxArea = area;
+                            primaryContact = rect;
+                        }
+                    }
+                    c.delete();
+                }
+
+                // 6. Draw all contacts
+                ctx.lineWidth = 1;
+                contacts.forEach(r => {
+                    ctx.strokeStyle = 'rgba(255, 165, 0, 0.5)'; // Orange for contacts
+                    ctx.strokeRect(r.x, r.y, r.width, r.height);
+                });
+
+                // 7. Highlight primary and check stability
+                if (primaryContact) {
+                    const prev = radarCandidate;
+                    const isPersistent = prev &&
+                        Math.abs(prev.x - primaryContact.x) < 40 &&
+                        Math.abs(prev.y - primaryContact.y) < 40;
+
+                    radarCandidate = primaryContact;
+                    radarStableFrames = isPersistent ? radarStableFrames + 1 : 1;
+
+                    // Draw primary candidate box (pulsing)
+                    ctx.strokeStyle = `rgba(255, 165, 0, ${0.5 + 0.5 * Math.sin(Date.now() / 150)})`;
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(primaryContact.x, primaryContact.y, primaryContact.width, primaryContact.height);
+
+                    // ACQU label
+                    ctx.fillStyle = 'orange';
+                    ctx.font = '10px monospace';
+                    ctx.fillText(`ACQU [${radarStableFrames}/${RADAR_STABLE_THRESHOLD}]`, primaryContact.x, primaryContact.y - 4);
+
+                    // 8. Auto-Lock after stable frames
+                    if (radarStableFrames >= RADAR_STABLE_THRESHOLD) {
+                        const roi = [primaryContact.x, primaryContact.y, primaryContact.width, primaryContact.height];
+                        tracker.init(frame, roi);
+                        radarCandidate = null;
+                        radarStableFrames = 0;
+                    }
+
+                    statusEl.innerText = `STATUS: RADAR [${contacts.length} TGT]`;
+                    statusEl.style.color = 'orange';
+                } else {
+                    radarCandidate = null;
+                    radarStableFrames = 0;
+                    statusEl.innerText = `STATUS: RADAR [SCANNING]`;
+                    statusEl.style.color = 'rgba(255,165,0,0.7)';
+                }
+
+                diff.delete(); contours.delete(); hierarchy.delete();
+            }
+
+            // Update previous frame
+            if (radarPrevGray) radarPrevGray.delete();
+            radarPrevGray = currGray;
+        }
+        // ───────────────────────────────────────────────────────────────────
+
         const result = tracker.update(frame, dt);
 
-        statusEl.innerText = `STATUS: ${tracker.status}`;
-        statusEl.style.color = tracker.status === "LOCKED" ? "#00ff41" : "#ffff00";
+        if (!isRadarMode) {
+            statusEl.innerText = `STATUS: ${tracker.status}`;
+            statusEl.style.color = tracker.status === "LOCKED" ? "#00ff41" : "#ffff00";
+        } else if (tracker.status === 'LOCKED') {
+            statusEl.innerText = `STATUS: RADAR LOCK`;
+            statusEl.style.color = '#00ff41';
+        }
 
         if (tracker.status === "LOCKED" && tracker.roi) {
             const [x, y, w, h] = tracker.roi;
