@@ -208,6 +208,7 @@ export class Tracker {
 
         let sumX = 0, sumY = 0, count = 0;
         let dxs = [], dys = [];
+        let initialPoints = [];
 
         for (let i = 0; i < this.st.rows; i++) {
             if (this.st.data[i] === 1) {
@@ -215,10 +216,11 @@ export class Tracker {
                 const px0 = this.p0.data32F[i * 2], py0 = this.p0.data32F[i * 2 + 1];
                 dxs.push(px1 - px0);
                 dys.push(py1 - py0);
+                initialPoints.push({ x: px1, y: py1 });
             }
         }
 
-        // MAD Outlier Rejection
+        let filteredPoints = initialPoints;
         if (dxs.length > 5) {
             const getMAD = (arr) => {
                 const mid = Math.floor(arr.length / 2);
@@ -229,7 +231,7 @@ export class Tracker {
             }
             const madX = getMAD(dxs), madY = getMAD(dys);
 
-            let filteredPoints = [];
+            filteredPoints = [];
             sumX = 0; sumY = 0; count = 0;
             for (let i = 0, j = 0; i < this.st.rows; i++) {
                 if (this.st.data[i] === 1) {
@@ -245,6 +247,11 @@ export class Tracker {
                     j++;
                 }
             }
+        } else {
+            // Simple pass-through if not enough points for MAD
+            sumX = initialPoints.reduce((s, p) => s + p.x, 0);
+            sumY = initialPoints.reduce((s, p) => s + p.y, 0);
+            count = initialPoints.length;
         }
 
         if (count > 5) {
