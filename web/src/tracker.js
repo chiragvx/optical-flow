@@ -1,76 +1,176 @@
+class KalmanFilter {
+    constructor() {
+        // State: [x, y, w, h, dx, dy, dw, dh]
+        this.state = null;
+        this.P = cv.Mat.eye(8, 8, cv.CV_32F); // Covariance
+        this.F = cv.Mat.eye(8, 8, cv.CV_32F); // State Transition
+        this.H = cv.Mat.zeros(4, 8, cv.CV_32F); // Measurement Matrix
+
+        // Transition matrix (constant velocity model)
+        const dt = 1.0;
+        for (let i = 0; i < 4; i++) {
+            this.F.data32F[i * 8 + (i + 4)] = dt;
+        }
+
+        // Measurement matrix: we only measure [x, y, w, h]
+        for (let i = 0; i < 4; i++) {
+            this.H.data32F[i * 8 + i] = 1.0;
+        }
+
+        this.Q = cv.Mat.eye(8, 8, cv.CV_32F).mul(cv.Mat.eye(8, 8, cv.CV_32F), 0.1); // Process Noise
+        this.R = cv.Mat.eye(4, 4, cv.CV_32F).mul(cv.Mat.eye(4, 4, cv.CV_32F), 0.5); // Measurement Noise
+    }
+
+    init(roi) {
+        if (this.state) this.state.delete();
+        this.state = new cv.Mat(8, 1, cv.CV_32F);
+        this.state.data32F.set([roi[0], roi[1], roi[2], roi[3], 0, 0, 0, 0]);
+        this.P = cv.Mat.eye(8, 8, cv.CV_32F).mul(cv.Mat.eye(8, 8, cv.CV_32F), 10.0);
+    }
+
+    predict() {
+        if (!this.state) return null;
+        // x = F * x
+        let nextState = new cv.Mat();
+        cv.gemm(this.F, this.state, 1, new cv.Mat(), 0, nextState);
+        this.state.delete();
+        this.state = nextState;
+
+        // P = F * P * F' + Q
+        let Ft = new cv.Mat();
+        cv.transpose(this.F, Ft);
+        let PFt = new cv.Mat();
+        cv.gemm(this.P, Ft, 1, new cv.Mat(), 0, PFt);
+        let FPFt = new cv.Mat();
+        cv.gemm(this.F, PFt, 1, new cv.Mat(), 0, FPFt);
+        cv.add(FPFt, this.Q, this.P);
+
+        Ft.delete(); PFt.delete(); FPFt.delete();
+        return Array.from(this.state.data32F.slice(0, 4));
+    }
+
+    update(roi) {
+        if (!this.state) return;
+        const z = new cv.Mat(4, 1, cv.CV_32F);
+        z.data32F.set(roi);
+
+        // y = z - H * x
+        let Hx = new cv.Mat();
+        cv.gemm(this.H, this.state, 1, new cv.Mat(), 0, Hx);
+        let y = new cv.Mat();
+        cv.subtract(z, Hx, y);
+
+        // S = H * P * H' + R
+        let Ht = new cv.Mat();
+        cv.transpose(this.H, Ht);
+        let PHt = new cv.Mat();
+        cv.gemm(this.P, Ht, 1, new cv.Mat(), 0, PHt);
+        let HPHt = new cv.Mat();
+        cv.gemm(this.H, PHt, 1, new cv.Mat(), 0, HPHt);
+        let S = new cv.Mat();
+        cv.add(HPHt, this.R, S);
+
+        // K = P * H' * S^-1
+        let Si = new cv.Mat();
+        cv.invert(S, Si);
+        let K = new cv.Mat();
+        cv.gemm(PHt, Si, 1, new cv.Mat(), 0, K);
+
+        // x = x + K * y
+        let Ky = new cv.Mat();
+        cv.gemm(K, y, 1, new cv.Mat(), 0, Ky);
+        let nextState = new cv.Mat();
+        cv.add(this.state, Ky, nextState);
+        this.state.delete();
+        this.state = nextState;
+
+        // P = (I - K * H) * P
+        let KH = new cv.Mat();
+        cv.gemm(K, this.H, 1, new cv.Mat(), 0, KH);
+        let I = cv.Mat.eye(8, 8, cv.CV_32F);
+        let IKH = new cv.Mat();
+        cv.subtract(I, KH, IKH);
+        let nextP = new cv.Mat();
+        cv.gemm(IKH, this.P, 1, new cv.Mat(), 0, nextP);
+        this.P.delete();
+        this.P = nextP;
+
+        z.delete(); Hx.delete(); y.delete(); Ht.delete(); PHt.delete();
+        HPHt.delete(); S.delete(); Si.delete(); K.delete(); Ky.delete();
+        KH.delete(); I.delete(); IKH.delete();
+    }
+
+    delete() {
+        if (this.state) this.state.delete();
+        if (this.P) this.P.delete();
+        if (this.F) this.F.delete();
+        if (this.H) this.H.delete();
+        if (this.Q) this.Q.delete();
+        if (this.R) this.R.delete();
+    }
+}
+
 export class Tracker {
     constructor() {
         this.prevGray = null;
         this.p0 = null;
-        this.roi = null; // [x, y, w, h]
+        this.roi = null;
         this.status = "STANDBY";
 
-        // LK Params - Optimized for Mobile Speed
         this.winSize = new cv.Size(15, 15);
         this.maxLevel = 2;
         this.criteria = new cv.TermCriteria(cv.TermCriteria_EPS | cv.TermCriteria_COUNT, 10, 0.05);
 
-        // Pre-allocate containers (lazy-initialized)
         this.p1 = null;
         this.st = null;
         this.err = null;
 
+        this.kalman = new KalmanFilter();
 
-        // Resilient Contrast Enhancement
         this.clahe = null;
         try {
             if (typeof cv.createCLAHE === 'function') {
                 this.clahe = cv.createCLAHE(2.0, new cv.Size(8, 8));
             }
-        } catch (e) {
-            console.warn("CLAHE not supported, using equalizeHist fallback.");
-        }
+        } catch (e) { }
 
-        this.scaleAlpha = 0.15; // Slow smoothing for scale
-        this.posAlpha = 0.4;    // Faster smoothing for position
-        this.baseSpread = 1.0;  // Initial point distribution spread
+        this.scaleAlpha = 0.1;
+        this.baseSpread = 1.0;
     }
 
     enhanceContrast(gray, rect) {
         if (rect.width <= 0 || rect.height <= 0) return;
         const roi = gray.roi(rect);
-        if (this.clahe) {
-            this.clahe.apply(roi, roi);
-        } else {
-            cv.equalizeHist(roi, roi);
-        }
+        if (this.clahe) this.clahe.apply(roi, roi);
+        else cv.equalizeHist(roi, roi);
         roi.delete();
     }
 
     init(frame, roi) {
-        const [x, y, w, h] = roi;
         if (this.prevGray) this.prevGray.delete();
         this.prevGray = new cv.Mat();
         cv.cvtColor(frame, this.prevGray, cv.COLOR_RGBA2GRAY);
 
         const rect = new cv.Rect(
-            Math.max(0, Math.floor(x)),
-            Math.max(0, Math.floor(y)),
-            Math.min(Math.floor(w), this.prevGray.cols - Math.max(0, Math.floor(x))),
-            Math.min(Math.floor(h), this.prevGray.rows - Math.max(0, Math.floor(y)))
+            Math.max(0, Math.floor(roi[0])), Math.max(0, Math.floor(roi[1])),
+            Math.min(Math.floor(roi[2]), this.prevGray.cols - Math.max(0, Math.floor(roi[0]))),
+            Math.min(Math.floor(roi[3]), this.prevGray.rows - Math.max(0, Math.floor(roi[1])))
         );
 
         if (rect.width > 10 && rect.height > 10) {
             this.enhanceContrast(this.prevGray, rect);
             const mask = new cv.Mat.zeros(this.prevGray.rows, this.prevGray.cols, cv.CV_8UC1);
             mask.roi(rect).setTo(new cv.Scalar(255));
-
             if (this.p0) this.p0.delete();
             this.p0 = new cv.Mat();
-            cv.goodFeaturesToTrack(this.prevGray, this.p0, 150, 0.01, 7, mask); // Increased for accuracy
+            cv.goodFeaturesToTrack(this.prevGray, this.p0, 150, 0.01, 7, mask);
             mask.delete();
-
 
             if (this.p0.rows > 5) {
                 this.roi = roi;
                 this.status = "LOCKED";
-                // Calculate initial spread for scaling
                 this.baseSpread = this.calculateSpread(this.p0);
+                this.kalman.init(roi);
                 return true;
             }
         }
@@ -78,24 +178,17 @@ export class Tracker {
         return false;
     }
 
-    calculateSpread(pointsMat) {
-        if (pointsMat.rows < 2) return 1.0;
-        let sumX = 0, sumY = 0;
-        const count = pointsMat.rows;
-        for (let i = 0; i < count; i++) {
-            sumX += pointsMat.data32F[i * 2];
-            sumY += pointsMat.data32F[i * 2 + 1];
+    calculateSpread(mat) {
+        let sx = 0, sy = 0, c = mat.rows;
+        for (let i = 0; i < c; i++) {
+            sx += mat.data32F[i * 2]; sy += mat.data32F[i * 2 + 1];
         }
-        const avgX = sumX / count;
-        const avgY = sumY / count;
-
-        let varSum = 0;
-        for (let i = 0; i < count; i++) {
-            const dx = pointsMat.data32F[i * 2] - avgX;
-            const dy = pointsMat.data32F[i * 2 + 1] - avgY;
-            varSum += Math.sqrt(dx * dx + dy * dy);
+        let ax = sx / c, ay = sy / c, vs = 0;
+        for (let i = 0; i < c; i++) {
+            let dx = mat.data32F[i * 2] - ax, dy = mat.data32F[i * 2 + 1] - ay;
+            vs += Math.sqrt(dx * dx + dy * dy);
         }
-        return varSum / count;
+        return vs / c;
     }
 
     update(frame) {
@@ -105,73 +198,91 @@ export class Tracker {
         if (!this.st) this.st = new cv.Mat();
         if (!this.err) this.err = new cv.Mat();
 
-        const gray = new cv.Mat();
+        // Kalman Prediction
+        const predictedROI = this.kalman.predict();
 
+        const gray = new cv.Mat();
         cv.cvtColor(frame, gray, cv.COLOR_RGBA2GRAY);
 
-        // 1. Single Pass LK (Speed Boost: No backward pass)
         cv.calcOpticalFlowPyrLK(this.prevGray, gray, this.p0, this.p1, this.st, this.err, this.winSize, this.maxLevel, this.criteria);
 
-        const points = [];
         let sumX = 0, sumY = 0, count = 0;
-        const ERR_THRESHOLD = 30.0; // Relaxed slightly for speed
+        let dxs = [], dys = [];
 
         for (let i = 0; i < this.st.rows; i++) {
-            if (this.st.data[i] === 1 && this.err.data32F[i] < ERR_THRESHOLD) {
-                const px = this.p1.data32F[i * 2];
-                const py = this.p1.data32F[i * 2 + 1];
-                points.push({ x: px, y: py });
-                sumX += px;
-                sumY += py;
-                count++;
+            if (this.st.data[i] === 1) {
+                const px1 = this.p1.data32F[i * 2], py1 = this.p1.data32F[i * 2 + 1];
+                const px0 = this.p0.data32F[i * 2], py0 = this.p0.data32F[i * 2 + 1];
+                dxs.push(px1 - px0);
+                dys.push(py1 - py0);
+            }
+        }
+
+        // MAD Outlier Rejection
+        if (dxs.length > 5) {
+            const getMAD = (arr) => {
+                const mid = Math.floor(arr.length / 2);
+                const sorted = [...arr].sort((a, b) => a - b);
+                const median = sorted[mid];
+                const devs = arr.map(x => Math.abs(x - median)).sort((a, b) => a - b);
+                return { median, mad: devs[mid] || 0.1 };
+            }
+            const madX = getMAD(dxs), madY = getMAD(dys);
+
+            let filteredPoints = [];
+            sumX = 0; sumY = 0; count = 0;
+            for (let i = 0, j = 0; i < this.st.rows; i++) {
+                if (this.st.data[i] === 1) {
+                    const dx = dxs[j], dy = dys[j];
+                    if (Math.abs(dx - madX.median) < 3 * madX.mad &&
+                        Math.abs(dy - madY.median) < 3 * madY.mad) {
+                        const px = this.p1.data32F[i * 2], py = this.p1.data32F[i * 2 + 1];
+                        filteredPoints.push({ x: px, y: py });
+                        sumX += px; sumY += py; count++;
+                    } else {
+                        this.st.data[i] = 0;
+                    }
+                    j++;
+                }
             }
         }
 
         if (count > 5) {
-            const centroidX = sumX / count;
-            const centroidY = sumY / count;
-
-            // 2. Fast O(N) Scale Estimation via Distribution Spread
+            const centroidX = sumX / count, centroidY = sumY / count;
             const currentSpread = this.calculateSpread(this.p1);
             let scale = currentSpread / this.baseSpread;
-            // Clamp and smooth scale
-            scale = 1.0 * (1 - this.scaleAlpha) + Math.min(1.2, Math.max(0.8, scale)) * this.scaleAlpha;
-            this.baseSpread = currentSpread; // Update base for next frame relative change
+            scale = 1.0 * (1 - this.scaleAlpha) + Math.min(1.1, Math.max(0.9, scale)) * this.scaleAlpha;
+            this.baseSpread = currentSpread;
 
             const [rx, ry, rw, rh] = this.roi;
-            const newW = rw * scale;
-            const newH = rh * scale;
+            const newW = rw * scale, newH = rh * scale;
+            const newROI = [centroidX - newW / 2, centroidY - newH / 2, newW, newH];
 
-            // 3. Sub-pixel ROI Smoothing (Restores visual "Snap")
-            this.roi = [
-                rx * (1 - this.posAlpha) + (centroidX - newW / 2) * this.posAlpha,
-                ry * (1 - this.posAlpha) + (centroidY - newH / 2) * this.posAlpha,
-                newW,
-                newH
-            ];
+            // Kalman Update
+            this.kalman.update(newROI);
+            this.roi = Array.from(this.kalman.state.data32F.slice(0, 4));
 
-            // 4. Lite Point Refreshing
-            if (count < 40) { // Refresh sooner to maintain high point density
-                this.refreshPoints(gray);
-            } else {
-
-                // Efficient Mat copy
-                const goodPoints = new cv.Mat(count, 1, cv.CV_32FC2);
-                let idx = 0;
-                for (let i = 0; i < this.st.rows; i++) {
+            if (count < 40) this.refreshPoints(gray);
+            else {
+                const gp = new cv.Mat(count, 1, cv.CV_32FC2);
+                for (let i = 0, idx = 0; i < this.st.rows; i++) {
                     if (this.st.data[i] === 1) {
-                        goodPoints.data32F[idx * 2] = this.p1.data32F[i * 2];
-                        goodPoints.data32F[idx * 2 + 1] = this.p1.data32F[i * 2 + 1];
+                        gp.data32F[idx * 2] = this.p1.data32F[i * 2];
+                        gp.data32F[idx * 2 + 1] = this.p1.data32F[i * 2 + 1];
                         idx++;
                     }
                 }
-                this.p0.delete();
-                this.p0 = goodPoints;
+                this.p0.delete(); this.p0 = gp;
             }
+            this.prevGray.delete(); this.prevGray = gray;
+            return { roi: this.roi, points: filteredPoints || [] };
+        }
 
-            this.prevGray.delete();
-            this.prevGray = gray;
-            return { roi: this.roi, points };
+        // If lost, use prediction for a few frames
+        if (predictedROI) {
+            this.roi = predictedROI;
+            this.prevGray.delete(); this.prevGray = gray;
+            return { roi: this.roi, points: [] };
         }
 
         this.status = "LOST";
@@ -181,29 +292,21 @@ export class Tracker {
 
     refreshPoints(gray) {
         const [x, y, w, h] = this.roi;
-        const mx = Math.max(0, Math.floor(x));
-        const my = Math.max(0, Math.floor(y));
-        const mw = Math.min(gray.cols - mx, Math.floor(w));
-        const mh = Math.min(gray.rows - my, Math.floor(h));
-
-        if (mw < 10 || mh < 10) return;
-
-        const rect = new cv.Rect(mx, my, mw, mh);
+        const rect = new cv.Rect(
+            Math.max(0, Math.floor(x)), Math.max(0, Math.floor(y)),
+            Math.min(gray.cols - Math.max(0, Math.floor(x)), Math.floor(w)),
+            Math.min(gray.rows - Math.max(0, Math.floor(y)), Math.floor(h))
+        );
+        if (rect.width < 10 || rect.height < 10) return;
         this.enhanceContrast(gray, rect);
-
         const mask = new cv.Mat.zeros(gray.rows, gray.cols, cv.CV_8UC1);
         mask.roi(rect).setTo(new cv.Scalar(255));
-
-        const newPoints = new cv.Mat();
-        cv.goodFeaturesToTrack(gray, newPoints, 60, 0.02, 7, mask);
-
-        if (newPoints.rows > 5) {
-            this.p0.delete();
-            this.p0 = newPoints;
+        const np = new cv.Mat();
+        cv.goodFeaturesToTrack(gray, np, 150, 0.01, 7, mask);
+        if (np.rows > 5) {
+            this.p0.delete(); this.p0 = np;
             this.baseSpread = this.calculateSpread(this.p0);
-        } else {
-            newPoints.delete();
-        }
+        } else np.delete();
         mask.delete();
     }
 
@@ -214,5 +317,6 @@ export class Tracker {
         if (this.st) this.st.delete();
         if (this.err) this.err.delete();
         if (this.clahe) this.clahe.delete();
+        this.kalman.delete();
     }
 }
